@@ -1,0 +1,7 @@
+[
+  {"id": "q_1", "text": "Which code has better logic and correctness?", "category": "preset_logic", "status": "answered"},
+  {"id": "q_2", "text": "Which code has better naming and clarity?", "category": "preset_naming", "status": "answered"},
+  {"id": "q_3", "text": "Which code has better organization and modularity?", "category": "preset_organization", "status": "answered"},
+  {"id": "q_4", "text": "Model A uses ast.FunctionDef only while B also handles AsyncFunctionDef in _read_flow_decorator_kwargs. Which approach handles async flows correctly and why?", "category": "custom", "status": "answered"},
+  {"id": "q_5", "text": "B uses importlib.util.find_spec for module resolution while A uses path splitting. In which cases does find_spec produce correct results where path splitting fails?", "category": "custom", "status": "answered"}
+]

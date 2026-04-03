@@ -1,0 +1,814 @@
+diff --git a/src/prefect/cli/deploy.py b/src/prefect/cli/deploy.py
+index 3fff1bf..afd6a16 100644
+--- a/src/prefect/cli/deploy.py
++++ b/src/prefect/cli/deploy.py
+@@ -65,14 +65,16 @@ from prefect.deployments.base import (
+ from prefect.deployments.steps.core import run_steps
+ from prefect.events import DeploymentTriggerTypes, TriggerTypes
+ from prefect.exceptions import ObjectNotFound, PrefectHTTPStatusError
+-from prefect.flows import load_flow_from_entrypoint
+ from prefect.settings import (
+     PREFECT_DEFAULT_WORK_POOL_NAME,
+     PREFECT_UI_URL,
+ )
+ from prefect.utilities.annotations import NotSet
+-from prefect.utilities.asyncutils import run_sync_in_worker_thread
+-from prefect.utilities.callables import parameter_schema
++from prefect.utilities.callables import (
++    _entrypoint_flow_description,
++    _entrypoint_flow_name,
++    parameter_schema_from_entrypoint,
++)
+ from prefect.utilities.collections import get_from_dict
+ from prefect.utilities.slugify import slugify
+ from prefect.utilities.templating import (
+@@ -474,18 +476,11 @@ async def _run_single_deploy(
+                 "You can also provide an entrypoint in a prefect.yaml file."
+             )
+         deploy_config["entrypoint"] = await prompt_entrypoint(app.console)
+-    if deploy_config.get("flow_name") and deploy_config.get("entrypoint"):
+-        raise ValueError(
+-            "Received an entrypoint and a flow name for this deployment. Please provide"
+-            " either an entrypoint or a flow name."
+-        )
+-
+-    # entrypoint logic
++    # entrypoint logic – use static AST extraction instead of importing the module
+     if deploy_config.get("entrypoint"):
+-        flow = await run_sync_in_worker_thread(
+-            load_flow_from_entrypoint, deploy_config["entrypoint"]
++        deploy_config["flow_name"] = _entrypoint_flow_name(
++            deploy_config["entrypoint"]
+         )
+-        deploy_config["flow_name"] = flow.name
+ 
+     deployment_name = deploy_config.get("name")
+     if not deployment_name:
+@@ -493,7 +488,9 @@ async def _run_single_deploy(
+             raise ValueError("A deployment name must be provided.")
+         deploy_config["name"] = prompt("Deployment name", default="default")
+ 
+-    deploy_config["parameter_openapi_schema"] = parameter_schema(flow)
++    deploy_config["parameter_openapi_schema"] = parameter_schema_from_entrypoint(
++        deploy_config["entrypoint"]
++    )
+ 
+     deploy_config["schedules"] = _construct_schedules(
+         deploy_config,
+@@ -673,8 +670,10 @@ async def _run_single_deploy(
+             )
+         deploy_config["work_pool"]["job_variables"]["image"] = "{{ build-image.image }}"
+ 
+-    if not deploy_config.get("description"):
+-        deploy_config["description"] = flow.description
++    if not deploy_config.get("description") and deploy_config.get("entrypoint"):
++        deploy_config["description"] = _entrypoint_flow_description(
++            deploy_config["entrypoint"]
++        )
+ 
+     # save deploy_config before templating
+     deploy_config_before_templating = deepcopy(deploy_config)
+diff --git a/src/prefect/utilities/callables.py b/src/prefect/utilities/callables.py
+index c087e0a..42d82d4 100644
+--- a/src/prefect/utilities/callables.py
++++ b/src/prefect/utilities/callables.py
+@@ -2,8 +2,10 @@
+ Utilities for working with Python callables.
+ """
+ 
++import ast
+ import inspect
+ from functools import partial
++from pathlib import Path
+ from typing import Any, Callable, Dict, Iterable, List, Optional, Tuple
+ 
+ import cloudpickle
+@@ -297,6 +299,48 @@ def create_v1_schema(name_: str, model_cfg, **model_fields):
+     return model.schema(by_alias=True)
+ 
+ 
++def _generate_parameter_schema(
++    signature: inspect.Signature,
++    docstrings: Dict[str, str],
++) -> "ParameterSchema":
++    """Shared logic for generating a ParameterSchema from a signature and docstrings."""
++    model_fields = {}
++    aliases = {}
++
++    if HAS_PYDANTIC_V2 and not has_v1_type_as_param(signature):
++        from pydantic import ConfigDict
++
++        ModelConfig = ConfigDict(arbitrary_types_allowed=True)
++        create_schema = create_v2_schema
++        process_params = process_v2_params
++    else:
++
++        class ModelConfig:
++            arbitrary_types_allowed = True
++
++        create_schema = create_v1_schema
++        process_params = process_v1_params
++
++    for position, param in enumerate(signature.parameters.values()):
++        name, type_, field = process_params(
++            param, position=position, docstrings=docstrings, aliases=aliases
++        )
++        # Generate a Pydantic model at each step so we can check if this parameter
++        # type supports schema generation
++        try:
++            create_schema(
++                "CheckParameter", model_cfg=ModelConfig, **{name: (type_, field)}
++            )
++        except (ValueError, TypeError):
++            # This field's type is not valid for schema creation, update it to `Any`
++            type_ = Any
++        model_fields[name] = (type_, field)
++
++    # Generate the final model and schema
++    schema = create_schema("Parameters", model_cfg=ModelConfig, **model_fields)
++    return ParameterSchema(**schema)
++
++
+ def parameter_schema(fn: Callable) -> ParameterSchema:
+     """Given a function, generates an OpenAPI-compatible description
+     of the function's arguments, including:
+@@ -318,38 +362,268 @@ def parameter_schema(fn: Callable) -> ParameterSchema:
+         # `eval_str` is not available in Python < 3.10
+         signature = inspect.signature(fn)
+ 
+-    model_fields = {}
+-    aliases = {}
+     docstrings = parameter_docstrings(inspect.getdoc(fn))
++    return _generate_parameter_schema(signature, docstrings)
+ 
+-    class ModelConfig:
+-        arbitrary_types_allowed = True
+ 
+-    if HAS_PYDANTIC_V2 and not has_v1_type_as_param(signature):
+-        create_schema = create_v2_schema
+-        process_params = process_v2_params
++def _resolve_source_path(entrypoint: str) -> Tuple[Path, str]:
++    """Given an entrypoint string, return the source file path and function name."""
++    if ":" in entrypoint:
++        path_str, func_name = entrypoint.rsplit(":", maxsplit=1)
++        source_path = Path(path_str)
+     else:
+-        create_schema = create_v1_schema
+-        process_params = process_v1_params
++        # module.path.func format
++        path_str, func_name = entrypoint.rsplit(".", maxsplit=1)
++        # Convert module path to file path
++        parts = path_str.split(".")
++        source_path = Path(*parts).with_suffix(".py")
++    return source_path, func_name
+ 
+-    for position, param in enumerate(signature.parameters.values()):
+-        name, type_, field = process_params(
+-            param, position=position, docstrings=docstrings, aliases=aliases
++
++def _find_flow_decorator_kwargs(
++    func_def: ast.FunctionDef,
++) -> Optional[Dict[str, ast.expr]]:
++    """Find the @flow decorator on a function def and return its keyword arguments.
++
++    Returns None if no @flow decorator is found.
++    Returns an empty dict for a bare @flow decorator (no call).
++    """
++    for decorator in func_def.decorator_list:
++        if isinstance(decorator, ast.Call):
++            func = decorator.func
++            if (isinstance(func, ast.Name) and func.id == "flow") or (
++                isinstance(func, ast.Attribute) and func.attr == "flow"
++            ):
++                return {kw.arg: kw.value for kw in decorator.keywords if kw.arg}
++        elif isinstance(decorator, ast.Name) and decorator.id == "flow":
++            return {}
++        elif isinstance(decorator, ast.Attribute) and decorator.attr == "flow":
++            return {}
++    return None
++
++
++def _read_flow_decorator_kwargs_from_source(
++    source_code: str, func_name: str, keyword: str
++) -> Optional[str]:
++    """Extract a keyword argument value from a @flow decorator without executing the module.
++
++    Returns the string value of the keyword if found, otherwise falls back to:
++    - For 'name': function name with underscores replaced by hyphens
++    - For other keywords: None
++
++    Raises ValueError if the function is not found in the source.
++    """
++    tree = ast.parse(source_code)
++
++    for node in ast.walk(tree):
++        if isinstance(node, ast.FunctionDef) and node.name == func_name:
++            kwargs = _find_flow_decorator_kwargs(node)
++            if kwargs is None:
++                # Function found but no @flow decorator — treat as bare
++                kwargs = {}
++
++            if keyword in kwargs:
++                value_node = kwargs[keyword]
++                if isinstance(value_node, ast.Constant) and isinstance(
++                    value_node.value, str
++                ):
++                    return value_node.value
++
++            # Fallback
++            if keyword == "name":
++                return func_name.replace("_", "-")
++            return None
++
++    raise ValueError(
++        f"Function {func_name!r} not found in source."
++    )
++
++
++def _build_safe_namespace(source_code: str) -> Dict[str, Any]:
++    """Build a best-effort namespace from source code by executing import
++    statements and class/function definitions, swallowing any errors."""
++    tree = ast.parse(source_code)
++    namespace: Dict[str, Any] = {}
++
++    for node in tree.body:
++        if isinstance(node, (ast.Import, ast.ImportFrom)):
++            try:
++                code = compile(ast.Module(body=[node], type_ignores=[]), "<string>", "exec")
++                exec(code, namespace)
++            except Exception:
++                pass
++        elif isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
++            try:
++                code = compile(ast.Module(body=[node], type_ignores=[]), "<string>", "exec")
++                exec(code, namespace)
++            except Exception:
++                pass
++
++    return namespace
++
++
++def _signature_from_ast(
++    func_def: ast.FunctionDef,
++    namespace: Dict[str, Any],
++) -> inspect.Signature:
++    """Build an inspect.Signature from an AST FunctionDef, evaluating
++    annotations and defaults in the provided namespace with graceful fallbacks."""
++    parameters = []
++
++    # Collect defaults: regular defaults align to the end of args
++    num_args = len(func_def.args.args)
++    num_defaults = len(func_def.args.defaults)
++    defaults_offset = num_args - num_defaults
++
++    for i, arg in enumerate(func_def.args.args):
++        name = arg.arg
++
++        # Evaluate annotation
++        annotation = inspect.Parameter.empty
++        if arg.annotation is not None:
++            try:
++                annotation = eval(  # noqa: S307
++                    compile(ast.Expression(body=arg.annotation), "<string>", "eval"),
++                    namespace,
++                )
++            except Exception:
++                pass
++
++        # Evaluate default
++        default = inspect.Parameter.empty
++        default_index = i - defaults_offset
++        if default_index >= 0:
++            default_node = func_def.args.defaults[default_index]
++            try:
++                default = eval(  # noqa: S307
++                    compile(ast.Expression(body=default_node), "<string>", "eval"),
++                    namespace,
++                )
++            except Exception:
++                pass
++
++        parameters.append(
++            inspect.Parameter(
++                name=name,
++                kind=inspect.Parameter.POSITIONAL_OR_KEYWORD,
++                default=default,
++                annotation=annotation,
++            )
+         )
+-        # Generate a Pydantic model at each step so we can check if this parameter
+-        # type supports schema generation
+-        try:
+-            create_schema(
+-                "CheckParameter", model_cfg=ModelConfig, **{name: (type_, field)}
++
++    # keyword-only args
++    for j, arg in enumerate(func_def.args.kwonlyargs):
++        name = arg.arg
++        annotation = inspect.Parameter.empty
++        if arg.annotation is not None:
++            try:
++                annotation = eval(  # noqa: S307
++                    compile(ast.Expression(body=arg.annotation), "<string>", "eval"),
++                    namespace,
++                )
++            except Exception:
++                pass
++
++        default = inspect.Parameter.empty
++        if j < len(func_def.args.kw_defaults) and func_def.args.kw_defaults[j] is not None:
++            try:
++                default = eval(  # noqa: S307
++                    compile(ast.Expression(body=func_def.args.kw_defaults[j]), "<string>", "eval"),
++                    namespace,
++                )
++            except Exception:
++                pass
++
++        parameters.append(
++            inspect.Parameter(
++                name=name,
++                kind=inspect.Parameter.KEYWORD_ONLY,
++                default=default,
++                annotation=annotation,
+             )
+-        except (ValueError, TypeError):
+-            # This field's type is not valid for schema creation, update it to `Any`
+-            type_ = Any
+-        model_fields[name] = (type_, field)
++        )
+ 
+-    # Generate the final model and schema
+-    schema = create_schema("Parameters", model_cfg=ModelConfig, **model_fields)
+-    return ParameterSchema(**schema)
++    return inspect.Signature(parameters=parameters)
++
++
++def _get_docstring_from_ast(func_def: ast.FunctionDef) -> Optional[str]:
++    """Extract the docstring from an AST FunctionDef node."""
++    return ast.get_docstring(func_def)
++
++
++def parameter_schema_from_entrypoint(entrypoint: str) -> ParameterSchema:
++    """Generate a parameter schema from an entrypoint string without importing the module."""
++    source_path, func_name = _resolve_source_path(entrypoint)
++    source_code = source_path.read_text()
++
++    tree = ast.parse(source_code)
++    func_def = None
++    for node in ast.walk(tree):
++        if isinstance(node, ast.FunctionDef) and node.name == func_name:
++            func_def = node
++            break
++
++    if func_def is None:
++        raise ValueError(f"Function {func_name!r} not found in {source_path!r}.")
++
++    namespace = _build_safe_namespace(source_code)
++    signature = _signature_from_ast(func_def, namespace)
++    docstring = _get_docstring_from_ast(func_def)
++    docstrings = parameter_docstrings(docstring)
++
++    return _generate_parameter_schema(signature, docstrings)
++
++
++def _read_flow_decorator_kwargs(
++    source_code: str, func_name: str
++) -> Optional[Dict[str, Any]]:
++    """Parse *source_code* as an AST and return the keyword arguments of the
++    ``@flow(...)`` decorator applied to *func_name*.
++
++    Returns an empty dict when the decorator is bare (``@flow`` without a call).
++    Returns ``None`` when the function is not found.
++    """
++    tree = ast.parse(source_code)
++    for node in ast.walk(tree):
++        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
++            if node.name != func_name:
++                continue
++            kwargs = _find_flow_decorator_kwargs(node)
++            if kwargs is not None:
++                # Convert AST nodes to plain values where possible
++                result: Dict[str, Any] = {}
++                for k, v in kwargs.items():
++                    if isinstance(v, ast.Constant):
++                        result[k] = v.value
++                    else:
++                        result[k] = v
++                return result
++            # Function found but no @flow decorator
++            return {}
++    return None
++
++
++def _entrypoint_flow_name(entrypoint: str) -> str:
++    """Return the flow name for an entrypoint without importing the module."""
++    source_path, func_name = _resolve_source_path(entrypoint)
++    source_code = source_path.read_text()
++    return _read_flow_decorator_kwargs_from_source(source_code, func_name, "name")
++
++
++def _entrypoint_flow_description(entrypoint: str) -> Optional[str]:
++    """Return the flow description for an entrypoint without importing the module."""
++    source_path, func_name = _resolve_source_path(entrypoint)
++    source_code = source_path.read_text()
++    try:
++        return _read_flow_decorator_kwargs_from_source(
++            source_code, func_name, "description"
++        )
++    except ValueError:
++        return None
++
++
++# Alias for test discoverability
++_load_safe_namespace = _build_safe_namespace
+ 
+ 
+ def raise_for_reserved_arguments(fn: Callable, reserved_arguments: Iterable[str]):
+diff --git a/tests/utilities/test_callables_static.py b/tests/utilities/test_callables_static.py
+new file mode 100644
+index 0000000..22a9eac
+--- /dev/null
++++ b/tests/utilities/test_callables_static.py
+@@ -0,0 +1,381 @@
++"""Tests for static (AST-based) entrypoint extraction utilities."""
++
++import textwrap
++from pathlib import Path
++
++import pytest
++
++from prefect.utilities.callables import (
++    _entrypoint_flow_description,
++    _entrypoint_flow_name,
++    _load_safe_namespace,
++    _read_flow_decorator_kwargs,
++    parameter_schema_from_entrypoint,
++)
++
++
++class TestReadFlowDecoratorKwargs:
++    def test_explicit_name(self):
++        source = textwrap.dedent("""\
++            from prefect import flow
++
++            @flow(name="my-custom-name")
++            def my_func():
++                pass
++        """)
++        kwargs = _read_flow_decorator_kwargs(source, "my_func")
++        assert kwargs["name"] == "my-custom-name"
++
++    def test_implicit_name_fallback_bare_decorator(self):
++        source = textwrap.dedent("""\
++            from prefect import flow
++
++            @flow
++            def my_func():
++                pass
++        """)
++        kwargs = _read_flow_decorator_kwargs(source, "my_func")
++        assert kwargs == {}
++        # When kwargs is empty, the caller should fall back to func name
++        assert kwargs.get("name", "my_func".replace("_", "-")) == "my-func"
++
++    def test_explicit_description(self):
++        source = textwrap.dedent("""\
++            from prefect import flow
++
++            @flow(description="A cool flow")
++            def my_func():
++                pass
++        """)
++        kwargs = _read_flow_decorator_kwargs(source, "my_func")
++        assert kwargs["description"] == "A cool flow"
++
++    def test_missing_description(self):
++        source = textwrap.dedent("""\
++            from prefect import flow
++
++            @flow(name="test")
++            def my_func():
++                pass
++        """)
++        kwargs = _read_flow_decorator_kwargs(source, "my_func")
++        assert "description" not in kwargs
++
++    def test_missing_function_returns_none(self):
++        source = textwrap.dedent("""\
++            from prefect import flow
++
++            @flow
++            def other_func():
++                pass
++        """)
++        result = _read_flow_decorator_kwargs(source, "nonexistent")
++        assert result is None
++
++    def test_prefect_dot_flow_decorator(self):
++        source = textwrap.dedent("""\
++            import prefect
++
++            @prefect.flow(name="dotted")
++            def my_func():
++                pass
++        """)
++        kwargs = _read_flow_decorator_kwargs(source, "my_func")
++        assert kwargs["name"] == "dotted"
++
++    def test_bare_prefect_dot_flow(self):
++        source = textwrap.dedent("""\
++            import prefect
++
++            @prefect.flow
++            def my_func():
++                pass
++        """)
++        kwargs = _read_flow_decorator_kwargs(source, "my_func")
++        assert kwargs == {}
++
++
++class TestEntrypointFlowName:
++    def test_path_colon_format(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++
++            @flow(name="custom-name")
++            def my_flow():
++                pass
++        """))
++        name = _entrypoint_flow_name(f"{flow_file}:my_flow")
++        assert name == "custom-name"
++
++    def test_fallback_to_function_name(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++
++            @flow
++            def my_flow_func():
++                pass
++        """))
++        name = _entrypoint_flow_name(f"{flow_file}:my_flow_func")
++        assert name == "my-flow-func"
++
++
++class TestEntrypointFlowDescription:
++    def test_explicit_description(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++
++            @flow(description="my desc")
++            def my_flow():
++                pass
++        """))
++        desc = _entrypoint_flow_description(f"{flow_file}:my_flow")
++        assert desc == "my desc"
++
++    def test_missing_description_returns_none(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++
++            @flow
++            def my_flow():
++                pass
++        """))
++        desc = _entrypoint_flow_description(f"{flow_file}:my_flow")
++        assert desc is None
++
++
++class TestParameterSchemaFromEntrypoint:
++    def test_no_arguments(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++
++            @flow
++            def my_flow():
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        assert schema.dict() == {
++            "properties": {},
++            "title": "Parameters",
++            "type": "object",
++        }
++
++    def test_required_and_optional_arguments(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++
++            @flow
++            def my_flow(x, y=42):
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert "x" in props
++        assert "y" in props
++        assert props["y"]["default"] == 42
++        assert "x" in schema.dict()["required"]
++
++    def test_annotated_types(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++
++            @flow
++            def my_flow(x: int, y: str = "hello"):
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert props["x"]["type"] == "integer"
++        assert props["y"]["type"] == "string"
++        assert props["y"]["default"] == "hello"
++
++    def test_datetime_types(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            import datetime
++            from prefect import flow
++
++            @flow
++            def my_flow(dt: datetime.datetime):
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert props["dt"]["type"] == "string"
++        assert props["dt"]["format"] == "date-time"
++
++    def test_pendulum_types(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            import pendulum
++            from prefect import flow
++
++            @flow
++            def my_flow(dt: pendulum.DateTime):
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert "dt" in props
++
++    def test_enum_type(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from enum import Enum
++            from prefect import flow
++
++            class Color(Enum):
++                RED = "red"
++                GREEN = "green"
++
++            @flow
++            def my_flow(color: Color):
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert "color" in props
++
++    def test_generic_types(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from typing import List
++            from prefect import flow
++
++            @flow
++            def my_flow(items: List[int]):
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert "items" in props
++
++    def test_user_defined_class(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++
++            class MyConfig:
++                pass
++
++            @flow
++            def my_flow(config: MyConfig):
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert "config" in props
++
++    def test_pydantic_model(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from pydantic import BaseModel
++            from prefect import flow
++
++            class MyModel(BaseModel):
++                name: str
++                value: int = 0
++
++            @flow
++            def my_flow(model: MyModel):
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert "model" in props
++
++    def test_secret_str(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from pydantic import SecretStr
++            from prefect import flow
++
++            @flow
++            def my_flow(secret: SecretStr):
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert "secret" in props
++
++    def test_docstring_extraction(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++
++            @flow
++            def my_flow(x: int, y: str):
++                \"\"\"My flow.
++
++                Args:
++                    x: The x value.
++                    y: The y value.
++                \"\"\"
++                pass
++        """))
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert props["x"].get("description") == "The x value."
++        assert props["y"].get("description") == "The y value."
++
++    def test_missing_third_party_import(self, tmp_path):
++        flow_file = tmp_path / "myflow.py"
++        flow_file.write_text(textwrap.dedent("""\
++            from prefect import flow
++            from nonexistent_package import SomeType
++
++            @flow
++            def my_flow(x: int, y: str = "hello"):
++                pass
++        """))
++        # Should not raise despite the missing import
++        schema = parameter_schema_from_entrypoint(f"{flow_file}:my_flow")
++        props = schema.dict()["properties"]
++        assert props["x"]["type"] == "integer"
++        assert props["y"]["type"] == "string"
++
++
++class TestLoadSafeNamespace:
++    def test_successful_imports(self):
++        source = textwrap.dedent("""\
++            import os
++            import datetime
++            from typing import List
++        """)
++        ns = _load_safe_namespace(source)
++        assert "os" in ns
++        assert "datetime" in ns
++        assert "List" in ns
++
++    def test_failed_imports_swallowed(self):
++        source = textwrap.dedent("""\
++            import os
++            from nonexistent_package_xyz import Foo
++            import datetime
++        """)
++        ns = _load_safe_namespace(source)
++        assert "os" in ns
++        assert "datetime" in ns
++        assert "Foo" not in ns
++
++    def test_failed_class_definition_swallowed(self):
++        source = textwrap.dedent("""\
++            import os
++            from nonexistent_package_xyz import BaseClass
++
++            class MyClass(BaseClass):
++                pass
++
++            class GoodClass:
++                pass
++        """)
++        ns = _load_safe_namespace(source)
++        assert "os" in ns
++        assert "MyClass" not in ns
++        assert "GoodClass" in ns

@@ -1,0 +1,95 @@
+● Let me start by understanding the current state of _signature_from_ast and the AST
+  argument structure.
+
+  Read 1 file (ctrl+o to expand)
+
+● Let me confirm the bugs exist by testing the missing parameter kinds:
+
+● Bash(PYTHONWARNINGS=ignore python3 -c "
+      import ast, inspect, textwrap…)
+  ⎿  Parameters: ['x']
+     Kinds: {'x': 'POSITIONAL_OR_KEYWORD'}
+     … +8 lines (ctrl+o to expand)
+
+● Confirmed all three issues:
+  1. *args and **kwargs are completely missing
+  2. Positional-only parameters (x, y before /) are in posonlyargs but never read
+  3. For positional-only, func_node.args.args only contains the non-positional-only args
+  (z), so they're classified as POSITIONAL_OR_KEYWORD — which is actually correct for z,
+  but x and y are lost entirely
+
+  Let me also verify the AST structure for *args/**kwargs:
+
+● Bash(PYTHONWARNINGS=ignore python3 -c "
+      import ast…)
+  ⎿  vararg: args - annotation: True
+     kwarg: kwargs - annotation: True
+     … +3 lines (ctrl+o to expand)
+
+● Key insight: func_node.args.defaults covers both posonlyargs and args combined
+  (right-aligned across the concatenation of both lists). Now let me read the test file to
+  understand what tests exist:
+
+  Read 1 file (ctrl+o to expand)
+
+● Good, I have the full picture. Now let me also check how the existing parameter_schema
+  (which works on live callables) handles these parameter kinds, since _signature_from_ast
+  should produce equivalent signatures:
+
+● Bash(PYTHONWARNINGS=ignore python3 -c "
+      from prefect.utilities.callables import parameter_schema…)
+  ⎿  *args/**kwargs schema: {'title': 'Parameters', 'type': 'object', 'properties': {'
+     x': {'position': 0, 'title': 'x', 'type': 'integer'}, 'args': {'position': 1, 'ti
+     tle': 'args', 'type': 'string'}, 'kwargs': {'position': 2, 'title': 'kwargs', 'ty
+     … +6 lines (ctrl+o to expand)
+
+● So the live parameter_schema includes *args and **kwargs in the schema (they show up with
+   their annotations and as required), and positional-only parameters appear as regular
+  parameters. The _generate_parameter_schema processes all parameters from the signature
+  regardless of kind, so I just need _signature_from_ast to produce a complete signature.
+
+  Now let me fix _signature_from_ast:
+
+● Update(src/prefect/utilities/callables.py)
+  ⎿  Added 45 lines, removed 6 lines
+      ...single loop over all_positional = posonlyargs + regular_args...
+      ...kind conditional based on index < len(posonlyargs)...
+      ...vararg handling...
+      ...kwarg handling...
+
+● Bash(ruff check src/prefect/utilities/callables.py --fix && ruff format
+      src/prefect/utilities/callables.py 2>&1)
+  ⎿  All checks passed!
+     1 file left unchanged
+
+● Now verify all three parameter kinds work:
+
+● Bash(PYTHONWARNINGS=ignore python3 -c "
+      import ast, inspect, textwrap…)
+  ⎿  *args/**kwargs:
+       Parameters: ['x', 'args', 'kwargs']
+       Kinds: {'x': 'POSITIONAL_OR_KEYWORD', 'args': 'VAR_POSITIONAL', 'kwargs': 'VAR_
+     … +14 lines (ctrl+o to expand)
+
+● All parameter kinds are correctly captured. Now let me verify the schema output matches
+  the live parameter_schema behavior:
+
+● Bash(PYTHONWARNINGS=ignore python3 -c "
+      import textwrap, tempfile, os…)
+  ⎿  Static schema: {'title': 'Parameters', 'type': 'object', 'properties': {'x': {'po
+     sition': 0, 'title': 'x', 'type': 'integer'}, 'args': {'position': 1, 'title': 'a
+     rgs', 'type': 'string'}, 'kwargs': {'position': 2, 'title': 'kwargs', 'type': 'nu
+     … +5 lines (ctrl+o to expand)
+
+● Identical output between static and live schemas. Now let me also verify the
+  positional-only case matches:
+
+● Bash(PYTHONWARNINGS=ignore python3 -c "
+      import textwrap, tempfile, os…)
+  ⎿  Static: {'title': 'Parameters', 'type': 'object', 'properties': {'x': {'position'
+     : 0, 'title': 'x', 'type': 'integer'}, 'y': {'default': 'hi', 'position': 1, 'tit
+     le': 'y', 'type': 'string'}, 'z': {'default': 1.0, 'position': 2, 'title': 'z', '
+     … +5 lines (ctrl+o to expand)
+  ⎿  Context limit reached · /compact or /clear to continue
+
+· Nesting… (1m 45s · ↑ 3.5k tokens)

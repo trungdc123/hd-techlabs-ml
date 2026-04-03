@@ -1,0 +1,4 @@
+ src/prefect/cli/deploy.py          |  30 ++--
+ src/prefect/utilities/callables.py | 298 ++++++++++++++++++++++++++++++----
+ tests/utilities/test_callables.py  | 320 ++++++++++++++++++++++++++++++++++++-
+ 3 files changed, 601 insertions(+), 47 deletions(-)

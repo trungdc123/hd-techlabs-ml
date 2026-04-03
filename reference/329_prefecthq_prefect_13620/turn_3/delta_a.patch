@@ -1,0 +1,106 @@
+--- /home/adam/output/329_prefecthq_prefect_13620/accepted_baseline_files/src/prefect/utilities/callables.py	2026-03-30 20:05:07.440003600 +0700
++++ /home/adam/.cache/claude-hfi/-home-adam-glo-snorkel-marlin-prefect-13620/A/src/prefect/utilities/callables.py	2026-03-30 20:13:35.211780185 +0700
+@@ -544,21 +544,45 @@
+ 
+     Annotations and default values are evaluated against *namespace*; failures
+     are silently replaced with ``inspect.Parameter.empty``.
++
++    Handles all five parameter kinds: ``POSITIONAL_ONLY``,
++    ``POSITIONAL_OR_KEYWORD``, ``VAR_POSITIONAL`` (*args),
++    ``KEYWORD_ONLY``, and ``VAR_KEYWORD`` (**kwargs).
+     """
+     parameters: List[inspect.Parameter] = []
+-    # Pair up defaults with args (defaults are right-aligned)
+-    num_args = len(func_node.args.args)
+-    num_defaults = len(func_node.args.defaults)
+-    non_default_count = num_args - num_defaults
++    ast_args = func_node.args
+ 
+-    for i, arg in enumerate(func_node.args.args):
+-        annotation = _eval_ast_node(arg.annotation, namespace)
++    # defaults are right-aligned across posonlyargs + args combined
++    all_positional = list(ast_args.posonlyargs) + list(ast_args.args)
++    num_positional = len(all_positional)
++    num_defaults = len(ast_args.defaults)
++    non_default_count = num_positional - num_defaults
++    num_posonly = len(ast_args.posonlyargs)
+ 
++    # 1. Positional-only parameters (before /)
++    for i, arg in enumerate(ast_args.posonlyargs):
++        annotation = _eval_ast_node(arg.annotation, namespace)
+         default = inspect.Parameter.empty
+         default_idx = i - non_default_count
+         if default_idx >= 0:
+-            default = _eval_ast_node(func_node.args.defaults[default_idx], namespace)
++            default = _eval_ast_node(ast_args.defaults[default_idx], namespace)
++        parameters.append(
++            inspect.Parameter(
++                arg.arg,
++                kind=inspect.Parameter.POSITIONAL_ONLY,
++                default=default,
++                annotation=annotation,
++            )
++        )
+ 
++    # 2. Positional-or-keyword parameters
++    for i, arg in enumerate(ast_args.args):
++        annotation = _eval_ast_node(arg.annotation, namespace)
++        default = inspect.Parameter.empty
++        # offset into the combined posonlyargs + args sequence
++        default_idx = (num_posonly + i) - non_default_count
++        if default_idx >= 0:
++            default = _eval_ast_node(ast_args.defaults[default_idx], namespace)
+         parameters.append(
+             inspect.Parameter(
+                 arg.arg,
+@@ -568,17 +592,26 @@
+             )
+         )
+ 
+-    # keyword-only arguments (those after a bare * in the signature)
+-    for j, arg in enumerate(func_node.args.kwonlyargs):
+-        annotation = _eval_ast_node(arg.annotation, namespace)
++    # 3. VAR_POSITIONAL (*args)
++    if ast_args.vararg is not None:
++        annotation = _eval_ast_node(ast_args.vararg.annotation, namespace)
++        parameters.append(
++            inspect.Parameter(
++                ast_args.vararg.arg,
++                kind=inspect.Parameter.VAR_POSITIONAL,
++                annotation=annotation,
++            )
++        )
+ 
++    # 4. Keyword-only parameters (after * or *args)
++    for j, arg in enumerate(ast_args.kwonlyargs):
++        annotation = _eval_ast_node(arg.annotation, namespace)
+         default = inspect.Parameter.empty
+-        if j < len(func_node.args.kw_defaults):
+-            kw_default_node = func_node.args.kw_defaults[j]
++        if j < len(ast_args.kw_defaults):
++            kw_default_node = ast_args.kw_defaults[j]
+             # kw_defaults entries are None when no default is provided
+             if kw_default_node is not None:
+                 default = _eval_ast_node(kw_default_node, namespace)
+-
+         parameters.append(
+             inspect.Parameter(
+                 arg.arg,
+@@ -587,6 +620,17 @@
+                 annotation=annotation,
+             )
+         )
++
++    # 5. VAR_KEYWORD (**kwargs)
++    if ast_args.kwarg is not None:
++        annotation = _eval_ast_node(ast_args.kwarg.annotation, namespace)
++        parameters.append(
++            inspect.Parameter(
++                ast_args.kwarg.arg,
++                kind=inspect.Parameter.VAR_KEYWORD,
++                annotation=annotation,
++            )
++        )
+ 
+     return inspect.Signature(parameters=parameters)
+ 

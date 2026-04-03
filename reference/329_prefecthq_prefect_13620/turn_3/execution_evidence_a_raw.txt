@@ -1,0 +1,98 @@
+● Both issues confirmed: *args, **kwargs, and positional-only parameters are all silently
+  dropped. Now let me understand the defaults situation for positional-only args — the AST
+  defaults list covers both posonlyargs and args together, right-aligned:
+
+● Bash(PYTHONWARNINGS=ignore python3 -c "
+      import ast…)
+  ⎿  posonlyargs: ['a', 'b']
+     args: ['c']
+     defaults: ["Constant(value='x')", 'Constant(value=1.0)']
+     … +2 lines (ctrl+o to expand)
+
+● Confirmed: defaults is right-aligned across posonlyargs + args combined. The current code
+   only considers len(args) for the alignment, which is wrong when posonlyargs is
+  non-empty.
+
+  Now let me read the test file to see what's there:
+
+  Read 1 file (ctrl+o to expand)
+
+● Good. Now I have a full understanding. Let me implement the fix. The key changes to
+  _signature_from_ast:
+
+  1. Process posonlyargs first (with POSITIONAL_ONLY kind)
+  2. Fix the defaults alignment to span posonlyargs + args combined
+  3. After kwonlyargs, add vararg (*args) as VAR_POSITIONAL
+  4. Add kwarg (**kwargs) as VAR_KEYWORD
+
+  Wait — actually, I need to think about parameter ordering. inspect.Signature requires
+  parameters in this order: POSITIONAL_ONLY, POSITIONAL_OR_KEYWORD, VAR_POSITIONAL,
+  KEYWORD_ONLY, VAR_KEYWORD. Let me restructure accordingly.
+
+● Update(src/prefect/utilities/callables.py)
+  ⎿  Added 57 lines, removed 13 lines
+      544
+      545      Annotations and default values are evaluated against *namespace*; failures
+      546      are silently replaced with ``inspect.Parameter.empty``.
+      547 +
+      548 +    Handles all five parameter kinds: ``POSITIONAL_ONLY``,
+      549 +    ``POSITIONAL_OR_KEYWORD``, ``VAR_POSITIONAL`` (*args),
+      550 +    ``KEYWORD_ONLY``, and ``VAR_KEYWORD`` (**kwargs).
+      551      """
+      552      parameters: List[inspect.Parameter] = []
+      553 +    ast_args = func_node.args
+      554
+      555 +    # defaults are right-aligned across posonlyargs + args combined
+      556 +    all_positional = list(ast_args.posonlyargs) + list(ast_args.args)
+      557 +    num_positional = len(all_positional)
+      558 +    num_defaults = len(ast_args.defaults)
+      559 +    non_default_count = num_positional - num_defaults
+      560 +    num_posonly = len(ast_args.posonlyargs)
+      561
+      562 +    # 1. Positional-only parameters (before /)
+      563 +    for i, arg in enumerate(ast_args.posonlyargs):
+      ...separate loops for posonlyargs and args...
+      
+      595 +    # 3. VAR_POSITIONAL (*args)
+      596 +    if ast_args.vararg is not None:
+      ...vararg handling...
+      
+      606 +    # 4. Keyword-only parameters (after * or *args)
+      ...kwonlyargs loop...
+      
+      624 +    # 5. VAR_KEYWORD (**kwargs)
+      625 +    if ast_args.kwarg is not None:
+      ...kwarg handling...
+
+● Now verify the fix works:
+
+● Bash(PYTHONWARNINGS=ignore PYTHONPATH="$(pwd)/src:$PYTHONPATH" python3 -c "
+      import ast, inspect…)
+  ⎿  Parameters: ['pos_only', 'regular', 'args', 'kw_only', 'kwargs']
+     Kinds: {'pos_only': 'POSITIONAL_ONLY', 'regular': 'POSITIONAL_OR_KEYWORD', 'args'
+     : 'VAR_POSITIONAL', 'kw_only': 'KEYWORD_ONLY', 'kwargs': 'VAR_KEYWORD'}
+     … +7 lines (ctrl+o to expand)
+
+● All parameter kinds are correctly captured with proper annotations and defaults. Now let
+  me verify the schema generation works end-to-end:
+
+● Bash(PYTHONWARNINGS=ignore PYTHONPATH="$(pwd)/src:$PYTHONPATH" python3 -c "
+      import tempfile, json, os…)
+  ⎿  {
+       "title": "Parameters",
+       "type": "object",
+     … +29 lines (ctrl+o to expand)
+
+● This matches the live parameter_schema output exactly. Now let me lint/format:
+
+● Bash(ruff check src/prefect/utilities/callables.py --fix && ruff format
+      src/prefect/utilities/callables.py 2>&1)
+  ⎿  All checks passed!
+     1 file left unchanged
+
+● Now add the tests. Let me read where the kwonly tests are:
+
+  Read 1 file (ctrl+o to expand)
+  ⎿  Context limit reached · /compact or /clear to continue
+
+* Metamorphosing… (2m 5s · ↑ 3.7k tokens)

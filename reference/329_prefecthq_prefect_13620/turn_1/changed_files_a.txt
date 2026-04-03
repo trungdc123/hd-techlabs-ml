@@ -1,0 +1,3 @@
+M	src/prefect/cli/deploy.py
+M	src/prefect/utilities/callables.py
+A	tests/utilities/test_callables_static.py

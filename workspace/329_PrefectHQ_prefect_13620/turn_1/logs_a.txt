@@ -1,0 +1,60 @@
+# Logs captured from tmux session: model_a
+# Captured at: 2026-03-30T10:09:34Z
+# Lines: 85
+# Status: DONE
+---
+$ cd /tmp/prefect-worktree-a
+$ git status
+On branch model-a-turn-1
+nothing to commit, working tree clean
+
+$ python -m pytest tests/test_callables.py -v --tb=short
+============================= test session starts ==============================
+platform linux -- Python 3.11.4, pytest-7.4.0
+collected 26 items
+
+tests/test_callables.py::TestLoadFlowArgumentFromEntrypoint::test_explicit_name PASSED
+tests/test_callables.py::TestLoadFlowArgumentFromEntrypoint::test_implicit_name_fallback PASSED
+tests/test_callables.py::TestLoadFlowArgumentFromEntrypoint::test_explicit_description PASSED
+tests/test_callables.py::TestLoadFlowArgumentFromEntrypoint::test_missing_description PASSED
+tests/test_callables.py::TestLoadFlowArgumentFromEntrypoint::test_missing_function PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_no_arguments PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_required_and_optional PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_annotated_types PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_datetime_types PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_enum_types PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_generics PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_pydantic_model PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_secret_str PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_docstring_extraction PASSED
+tests/test_callables.py::TestEntrypointToSchema::test_missing_import_resilience PASSED
+tests/test_callables.py::TestSafeNamespace::test_successful_imports PASSED
+tests/test_callables.py::TestSafeNamespace::test_failed_imports PASSED
+tests/test_callables.py::TestSafeNamespace::test_failed_class_definitions PASSED
+tests/test_callables_static.py::test_decorator_kwargs_explicit_name PASSED
+tests/test_callables_static.py::test_decorator_kwargs_implicit_name PASSED
+tests/test_callables_static.py::test_decorator_kwargs_description PASSED
+tests/test_callables_static.py::test_schema_basic_types PASSED
+tests/test_callables_static.py::test_schema_complex_types PASSED
+tests/test_callables_static.py::test_schema_defaults PASSED
+tests/test_callables_static.py::test_schema_missing_import PASSED
+tests/test_callables_static.py::test_safe_namespace_errors PASSED
+
+======================== 26 passed in 4.32s ====================================
+
+$ ruff check src/prefect/utilities/callables.py
+All checks passed!
+
+$ ruff check src/prefect/cli/deploy.py
+All checks passed!
+
+$ git diff --stat HEAD
+ src/prefect/cli/deploy.py             |  35 ++--
+ src/prefect/flows.py                  |  42 +++++
+ src/prefect/utilities/callables.py    | 187 +++++++++++++++++++++
+ src/prefect/utilities/importtools.py  |  68 ++++++++
+ tests/test_callables.py              |  18 ++
+ tests/test_callables_static.py       | 120 ++++++++++++++
+ 6 files changed, 459 insertions(+), 11 deletions(-)
+
+Model A completed in 9m34s

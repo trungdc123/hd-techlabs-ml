@@ -1,0 +1,250 @@
+--- /home/adam/output/329_prefecthq_prefect_13620/accepted_baseline_files/src/prefect/utilities/callables.py	2026-03-30 16:29:21.999497853 +0700
++++ /home/adam/.cache/claude-hfi/-home-adam-glo-snorkel-marlin-prefect-13620/B/src/prefect/utilities/callables.py	2026-03-30 16:16:51.973714732 +0700
+@@ -454,8 +454,9 @@
+     Uses AST parsing to read the ``name`` kwarg from the ``@flow`` decorator.
+     Falls back to the function name with underscores replaced by hyphens.
+ 
+-    Raises ``ValueError`` if the function specified in the entrypoint cannot
+-    be found in the source.
++    Raises:
++        ValueError: If the function specified in the entrypoint does not exist
++            in the source file.
+     """
+     path, func_name = _resolve_entrypoint(entrypoint)
+ 
+@@ -470,10 +471,10 @@
+             return func_name.replace("_", "-")
+         source_code = Path(spec.origin).read_text()
+ 
+-    # Raises ValueError if the function doesn't exist in the source
++    # ValueError propagates if the function is not found in source
+     kwargs = _read_flow_decorator_kwargs(source_code, func_name)
+     if kwargs is None:
+-        # Function found but no @flow decorator — fall back to name convention
++        # Function found but no @flow decorator
+         return func_name.replace("_", "-")
+     return kwargs.get("name", func_name.replace("_", "-"))
+ 
+@@ -484,8 +485,9 @@
+     Uses AST parsing to read the ``description`` kwarg from the ``@flow`` decorator.
+     Returns ``None`` when no description is set.
+ 
+-    Raises ``ValueError`` if the function specified in the entrypoint cannot
+-    be found in the source.
++    Raises:
++        ValueError: If the function specified in the entrypoint does not exist
++            in the source file.
+     """
+     path, func_name = _resolve_entrypoint(entrypoint)
+ 
+@@ -499,7 +501,7 @@
+             return None
+         source_code = Path(spec.origin).read_text()
+ 
+-    # Raises ValueError if the function doesn't exist in the source
++    # ValueError propagates if the function is not found in source
+     kwargs = _read_flow_decorator_kwargs(source_code, func_name)
+     if kwargs is None:
+         # Function found but no @flow decorator
+@@ -552,12 +554,30 @@
+     non_default_count = num_args - num_defaults
+ 
+     for i, arg in enumerate(func_node.args.args):
+-        annotation = _eval_ast_node(arg.annotation, namespace)
++        annotation = inspect.Parameter.empty
++        if arg.annotation is not None:
++            try:
++                annotation = eval(  # noqa: S307
++                    compile(ast.Expression(body=arg.annotation), "<ann>", "eval"),
++                    namespace,
++                )
++            except Exception:
++                pass
+ 
+         default = inspect.Parameter.empty
+         default_idx = i - non_default_count
+         if default_idx >= 0:
+-            default = _eval_ast_node(func_node.args.defaults[default_idx], namespace)
++            try:
++                default = eval(  # noqa: S307
++                    compile(
++                        ast.Expression(body=func_node.args.defaults[default_idx]),
++                        "<default>",
++                        "eval",
++                    ),
++                    namespace,
++                )
++            except Exception:
++                pass
+ 
+         parameters.append(
+             inspect.Parameter(
+@@ -568,16 +588,34 @@
+             )
+         )
+ 
+-    # keyword-only arguments (those after a bare * in the signature)
++    # Keyword-only arguments (after bare * in the signature)
+     for j, arg in enumerate(func_node.args.kwonlyargs):
+-        annotation = _eval_ast_node(arg.annotation, namespace)
++        annotation = inspect.Parameter.empty
++        if arg.annotation is not None:
++            try:
++                annotation = eval(  # noqa: S307
++                    compile(ast.Expression(body=arg.annotation), "<ann>", "eval"),
++                    namespace,
++                )
++            except Exception:
++                pass
+ 
+         default = inspect.Parameter.empty
+-        if j < len(func_node.args.kw_defaults):
+-            kw_default_node = func_node.args.kw_defaults[j]
+-            # kw_defaults entries are None when no default is provided
+-            if kw_default_node is not None:
+-                default = _eval_ast_node(kw_default_node, namespace)
++        if (
++            j < len(func_node.args.kw_defaults)
++            and func_node.args.kw_defaults[j] is not None
++        ):
++            try:
++                default = eval(  # noqa: S307
++                    compile(
++                        ast.Expression(body=func_node.args.kw_defaults[j]),
++                        "<default>",
++                        "eval",
++                    ),
++                    namespace,
++                )
++            except Exception:
++                pass
+ 
+         parameters.append(
+             inspect.Parameter(
+@@ -591,23 +629,6 @@
+     return inspect.Signature(parameters=parameters)
+ 
+ 
+-def _eval_ast_node(node: Optional[ast.expr], namespace: Dict[str, Any]) -> Any:
+-    """Evaluate an AST expression node against *namespace*.
+-
+-    Returns ``inspect.Parameter.empty`` when *node* is ``None`` or evaluation
+-    fails.
+-    """
+-    if node is None:
+-        return inspect.Parameter.empty
+-    try:
+-        return eval(  # noqa: S307
+-            compile(ast.Expression(body=node), "<ast_eval>", "eval"),
+-            namespace,
+-        )
+-    except Exception:
+-        return inspect.Parameter.empty
+-
+-
+ def _get_docstring_from_ast(func_node: ast.FunctionDef) -> Optional[str]:
+     """Extract the docstring from an AST function definition."""
+     return ast.get_docstring(func_node)
+--- /home/adam/output/329_prefecthq_prefect_13620/accepted_baseline_files/tests/utilities/test_callables.py	2026-03-30 16:29:21.999497853 +0700
++++ /home/adam/.cache/claude-hfi/-home-adam-glo-snorkel-marlin-prefect-13620/B/tests/utilities/test_callables.py	2026-03-30 16:16:03.678677629 +0700
+@@ -980,15 +980,7 @@
+         result = callables._read_flow_decorator_kwargs(source, "my_flow")
+         assert result.get("description") is None
+ 
+-    def test_function_found_without_decorator_returns_none(self):
+-        source = textwrap.dedent("""\
+-            def my_flow():
+-                pass
+-        """)
+-        result = callables._read_flow_decorator_kwargs(source, "my_flow")
+-        assert result is None
+-
+-    def test_missing_function_raises_valueerror(self):
++    def test_missing_function_raises(self):
+         source = textwrap.dedent("""\
+             from prefect import flow
+ 
+@@ -999,29 +991,13 @@
+         with pytest.raises(ValueError, match="not found"):
+             callables._read_flow_decorator_kwargs(source, "my_flow")
+ 
+-    def test_entrypoint_flow_name_raises_on_missing_function(self, tmp_path):
+-        source = textwrap.dedent("""\
+-            from prefect import flow
+-
+-            @flow
+-            def other_flow():
+-                pass
+-        """)
+-        (tmp_path / "flows.py").write_text(source)
+-        with pytest.raises(ValueError, match="not found"):
+-            callables._entrypoint_flow_name(f"{tmp_path / 'flows.py'}:my_flow")
+-
+-    def test_entrypoint_flow_description_raises_on_missing_function(self, tmp_path):
++    def test_function_found_without_decorator_returns_none(self):
+         source = textwrap.dedent("""\
+-            from prefect import flow
+-
+-            @flow
+-            def other_flow():
++            def my_flow():
+                 pass
+         """)
+-        (tmp_path / "flows.py").write_text(source)
+-        with pytest.raises(ValueError, match="not found"):
+-            callables._entrypoint_flow_description(f"{tmp_path / 'flows.py'}:my_flow")
++        result = callables._read_flow_decorator_kwargs(source, "my_flow")
++        assert result is None
+ 
+ 
+ class TestParameterSchemaFromEntrypoint:
+@@ -1222,34 +1198,32 @@
+         schema = callables.parameter_schema_from_entrypoint(
+             f"{tmp_path / 'flows.py'}:my_flow"
+         )
+-        result = schema.dict()
+-        assert "x" in result["properties"]
+-        assert "y" in result["properties"]
+-        assert "z" in result["properties"]
+-        assert result["properties"]["x"]["type"] == "integer"
+-        assert result["properties"]["y"]["default"] == "hello"
+-        assert result["properties"]["y"]["type"] == "string"
+-        assert result["properties"]["z"]["default"] == 1.0
+-        assert result["properties"]["z"]["type"] == "number"
+-        assert result["required"] == ["x"]
++        props = schema.dict()["properties"]
++        assert "x" in props
++        assert "y" in props
++        assert "z" in props
++        assert props["y"]["default"] == "hello"
++        assert props["z"]["default"] == 1.0
++        assert schema.dict()["required"] == ["x"]
+ 
+-    def test_keyword_only_arguments_without_defaults(self, tmp_path):
++    def test_keyword_only_required_argument(self, tmp_path):
+         source = textwrap.dedent("""\
+             from prefect import flow
+ 
+             @flow
+-            def my_flow(*, x: int, y: str = "hi"):
++            def my_flow(*, name: str, count: int = 0):
+                 pass
+         """)
+         (tmp_path / "flows.py").write_text(source)
+         schema = callables.parameter_schema_from_entrypoint(
+             f"{tmp_path / 'flows.py'}:my_flow"
+         )
+-        result = schema.dict()
+-        assert "x" in result["properties"]
+-        assert "y" in result["properties"]
+-        assert result["required"] == ["x"]
+-        assert result["properties"]["y"]["default"] == "hi"
++        props = schema.dict()["properties"]
++        assert "name" in props
++        assert "count" in props
++        assert props["name"]["type"] == "string"
++        assert props["count"]["default"] == 0
++        assert "name" in schema.dict()["required"]
+ 
+     def test_missing_third_party_import_does_not_fail(self, tmp_path):
+         source = textwrap.dedent("""\

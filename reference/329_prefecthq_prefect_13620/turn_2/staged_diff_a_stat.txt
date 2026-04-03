@@ -1,0 +1,3 @@
+ src/prefect/utilities/callables.py | 340 +++++++++++++++++++++++++++++---
+ tests/utilities/test_callables.py  | 393 ++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 702 insertions(+), 31 deletions(-)
