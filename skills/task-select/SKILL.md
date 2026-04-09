@@ -67,6 +67,7 @@ Check each criterion:
 - Multiple files changed with logic changes
 - Clear problem statement in PR description
 - Code changes involve functions/classes (not just config)
+- PR fits at least one Turn 1 category (see Turn 1 Category Constraint below)
 
 **SKIP signals (any one is enough):**
 - Pure documentation or README changes
@@ -76,6 +77,7 @@ Check each criterion:
 - PR is > 500 lines of real code changes (too large to review in time)
 - No testable behavior
 - Language/framework you can't evaluate (e.g., COBOL)
+- PR only fits removed Turn 1 categories (Testing and QA, New Feature, Refactor, Bug Fix) with no viable Turn 1 category from the 10 allowed
 
 **CAUTION signals:**
 - PR touches many files but changes are mechanical (rename, move)
@@ -111,6 +113,29 @@ For each PR, fill this mental table before deciding:
 | Domain Knowledge | General/Specialized | what expertise needed |
 | Turn Potential | 1-2 / 3+ turns | enough depth for multi-turn? |
 
+## Turn 1 Category Constraint
+
+Turn 1 MUST use one of these 10 categories:
+
+| # | Category |
+|---|----------|
+| 1 | Git |
+| 2 | Ambiguous |
+| 3 | Discussion |
+| 4 | Explaining |
+| 5 | Code Review |
+| 6 | Greenfield |
+| 7 | Chore |
+| 8 | Documentation |
+| 9 | Performance |
+| 10 | Other |
+
+**Removed from Turn 1:** Testing and QA, New Feature, Refactor, Bug Fix - these 4 are NOT allowed for Turn 1.
+
+**Turn 2+ MAY use any category**, including the 4 removed ones. Turn 1 in one category, Turn 2+ in a different category = valid multi-category pattern, NOT drip-feeding.
+
+When evaluating a PR: if it cannot fit any of the 10 Turn 1 categories, SKIP it. If it primarily fits a removed category but can also be framed under a Turn 1 category, it may still be viable - note this in the evaluation.
+
 ## CRITICAL: PR Status is IRRELEVANT
 
 PR/issue status (merged, closed, open) does NOT matter.
@@ -126,3 +151,4 @@ Picking a bad task is a 5.2% rejection reason ("Low Quality Task"). Avoid:
 - Tasks that are pure config/generated code (no human judgment needed)
 - Tasks requiring deep domain expertise CTV doesn't have
 - PRs with files changed >= 10 (hard to review within time limit, per Marlin Guideline)
+- Tasks that only fit removed Turn 1 categories (Testing and QA, New Feature, Refactor, Bug Fix) - no viable Turn 1 category = rejection risk

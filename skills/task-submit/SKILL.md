@@ -67,7 +67,9 @@ Write `step1_spec.md` to the workspace with these 6 sections:
 
 ### Phase 2: Draft Each Field
 
-**Prompt Category** (V3 - 14 categories, REQUIRED to select at least 1):
+**Prompt Category** (V3 - 10 Turn 1 categories + 4 Turn 2+ only):
+
+**Turn 1 categories (MUST select from these for Turn 1):**
 
 | Category | Description |
 |----------|--------|
@@ -76,17 +78,22 @@ Write `step1_spec.md` to the workspace with these 6 sections:
 | Discussion | Answer questions without producing code, high variance needed |
 | Explaining | Explain how code works, narrate changes and reasoning |
 | Code Review | Review code at meaningful scope (feature suite level) |
-| Refactor | Cleanup, consolidate logic, improve readability |
 | Greenfield | Start from empty repo, build from scratch |
-| Bug Fix | Fix a specific, reproducible bug |
 | Chore | Maintenance: dependency updates, config, build system |
 | Documentation | Write/update docs, comments, docstrings, READMEs |
-| New Feature | Add entirely new functionality to existing repo |
 | Performance | Improve latency, memory usage, or computational cost |
-| Testing and QA | Write/improve/extend tests |
 | Other | Use only when task genuinely does not fit any above |
 
-Select 1-2 most fitting categories. Conversations may span multiple types across turns.
+**Turn 2+ only categories (NOT allowed for Turn 1):**
+
+| Category | Description |
+|----------|--------|
+| Refactor | Cleanup, consolidate logic, improve readability |
+| Bug Fix | Fix a specific, reproducible bug |
+| New Feature | Add entirely new functionality to existing repo |
+| Testing and QA | Write/improve/extend tests |
+
+Turn 1 MUST use one of the 10 Turn 1 categories. Turn 2+ MAY use any category, including the 4 Turn 2+ only ones. Turn 1 in one category, Turn 2+ in a different category = valid multi-category pattern, NOT drip-feeding.
 
 **Repo Definition**: 
 - Paragraph 1: What the repo/project does overall
@@ -157,6 +164,7 @@ V3 allows Turn 1 to only cover core logic. Later turns may add edge cases, tests
 - Must not be over-prescriptive (describe problem, not step-by-step)
 - Prompt scope must be coherent - like 1 hypothetical PR
 - Must not request features entirely unrelated to repo/PR scope
+- Turn 1 category MUST be from the 10 Turn 1 categories (not Refactor, Bug Fix, New Feature, Testing and QA)
 
 **GATE 3 - Anti-AI Rewrite:**
 Read the entire output through the rewrite-human lens:

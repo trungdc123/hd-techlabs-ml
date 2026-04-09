@@ -76,7 +76,10 @@ Source: 288-row Marlin Dashboard Feedback dataset. These are the top reasons tas
 
 ### Category Mismatch
 - Every V3 submission must have at least 1 prompt matching the selected category
-- 14 categories: Git, Ambiguous, Discussion, Explaining, Code Review, Refactor, Greenfield, Bug Fix, Chore, Documentation, New Feature, Performance, Testing and QA, Other
+- 10 Turn 1 categories: Git, Ambiguous, Discussion, Explaining, Code Review, Greenfield, Chore, Documentation, Performance, Other
+- 4 Turn 2+ only categories: Refactor, Bug Fix, New Feature, Testing and QA
+- Turn 1 MUST use one of the 10 Turn 1 categories. Turn 2+ may use any category including the 4 removed ones
+- Turn 1 in one category, Turn 2+ in a different category = valid multi-category pattern, NOT drip-feeding
 
 ### Descriptive (not Evaluative) Strengths
 - Strengths field must explain WHY something matters, not just describe
@@ -93,6 +96,7 @@ Source: 288-row Marlin Dashboard Feedback dataset. These are the top reasons tas
 - BUT each turn must advance implementation concretely
 - CANNOT repeat content already covered in prior turns
 - Pure repetition is still rejected, phased advancement is OK
+- Turn 1 in one category, Turn 2+ in a different category = valid pattern, NOT drip-feeding
 
 ### N/A Rating = Rejection
 - Every axis (6.1-6.11) MUST have a rating. CANNOT use N/A
