@@ -42,7 +42,7 @@ echo "Fetching PR diff: ${OWNER}/${REPO}#${PR}..."
 
 curl -fsSL -L \
   -H "Accept: application/vnd.github.v3.diff" \
-  "${AUTH_HEADER[@]}" \
+  ${AUTH_HEADER[@]+"${AUTH_HEADER[@]}"} \
   "https://api.github.com/repos/${OWNER}/${REPO}/pulls/${PR}" \
   -o "${WORKSPACE}/pr.diff"
 

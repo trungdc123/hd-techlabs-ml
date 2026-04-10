@@ -3,5 +3,5 @@
 __pycache__/
 .env
 claude-hfi
-.claude/
 workspace/
+.claude/
