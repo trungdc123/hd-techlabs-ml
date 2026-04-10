@@ -117,20 +117,27 @@ For each PR, fill this mental table before deciding:
 
 Turn 1 MUST use one of these 10 categories:
 
-| # | Category |
-|---|----------|
-| 1 | Git |
-| 2 | Ambiguous |
-| 3 | Discussion |
-| 4 | Explaining |
-| 5 | Code Review |
-| 6 | Greenfield |
-| 7 | Chore |
-| 8 | Documentation |
-| 9 | Performance |
-| 10 | Other |
+| # | Category | Description |
+|---|----------|-------------|
+| 1 | Git | Tasks involving git actions. Complex enough that both models take meaningfully different approaches. Avoid race-condition prompts (e.g., creating branch by name). |
+| 2 | Ambiguous | Tasks where the ideal response is to ask for clarification rather than immediately produce code. Would a senior engineer stop and get clarification first? |
+| 3 | Discussion | Answer questions without producing code. Challenging questions where model response quality has significant variance. Ideally requires repo knowledge. |
+| 4 | Explaining | Explain how specific code works, walk through a codebase, or narrate what was done and why. Distinct from Discussion (reasoning/tradeoffs vs how code works). |
+| 5 | Code Review | Ask for a code review. Reviewing a feature suite is typically the right scope. Trivial code with no issues is not useful. |
+| 6 | Greenfield | Task starts from an empty repository. Build from scratch using creativity or PR inspiration. No PR required. |
+| 7 | Chore | Maintenance that does not change external behavior - dependency updates, config, build system fixes. Must still be complex enough for meaningful model difference. |
+| 8 | Documentation | Write, update, or improve documentation - inline comments, docstrings, README, API docs. Challenging enough that model quality varies. |
+| 9 | Performance | Improve performance of existing code - reducing latency, memory usage, or computational cost. Must have clear success condition. |
+| 10 | Other | Use only when task genuinely does not fit any above |
 
-**Removed from Turn 1:** Testing and QA, New Feature, Refactor, Bug Fix - these 4 are NOT allowed for Turn 1.
+**Removed from Turn 1 (Turn 2+ only):**
+
+| Category | Description |
+|----------|-------------|
+| Refactor | Cleanup, dead code removal, performance-motivated restructuring, consolidating duplicated logic, improving naming/readability without changing behavior. |
+| Bug Fix | Identify and fix a specific, concrete, reproducible bug. Avoid prompts too vague to evaluate. |
+| New Feature | Add entirely new functionality to existing repo. Distinct from Greenfield (empty repo). |
+| Testing and QA | Write, improve, or extend tests. Distinct from Code Review - involves implementing test changes, not recommending them. |
 
 **Turn 2+ MAY use any category**, including the 4 removed ones. Turn 1 in one category, Turn 2+ in a different category = valid multi-category pattern, NOT drip-feeding.
 

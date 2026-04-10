@@ -76,10 +76,32 @@ Source: 288-row Marlin Dashboard Feedback dataset. These are the top reasons tas
 
 ### Category Mismatch
 - Every V3 submission must have at least 1 prompt matching the selected category
-- 10 Turn 1 categories: Git, Ambiguous, Discussion, Explaining, Code Review, Greenfield, Chore, Documentation, Performance, Other
-- 4 Turn 2+ only categories: Refactor, Bug Fix, New Feature, Testing and QA
 - Turn 1 MUST use one of the 10 Turn 1 categories. Turn 2+ may use any category including the 4 removed ones
 - Turn 1 in one category, Turn 2+ in a different category = valid multi-category pattern, NOT drip-feeding
+
+**10 Turn 1 categories:**
+
+| Category | Description |
+|----------|-------------|
+| Git | Tasks involving git actions. Complex enough that both models take meaningfully different approaches. Avoid race-condition prompts. |
+| Ambiguous | Tasks where ideal response is to ask for clarification rather than immediately produce code. |
+| Discussion | Answer questions without producing code. Challenging questions with significant model response variance. Ideally requires repo knowledge. |
+| Explaining | Explain how specific code works, walk through codebase, or narrate changes and reasoning. Distinct from Discussion (reasoning/tradeoffs vs how code works). |
+| Code Review | Ask for code review at meaningful scope (feature suite level). Trivial code with no issues is not useful. |
+| Greenfield | Task starts from empty repository. Build from scratch. No PR required if using own creativity. |
+| Chore | Maintenance that does not change external behavior - dependency updates, config, build system. Must be complex enough for meaningful model difference. |
+| Documentation | Write, update, or improve documentation - comments, docstrings, README, API docs. Challenging enough that model quality varies. |
+| Performance | Improve performance - reducing latency, memory usage, or computational cost. Must have clear success condition. |
+| Other | Use only when task genuinely does not fit any above. |
+
+**4 Turn 2+ only categories:**
+
+| Category | Description |
+|----------|-------------|
+| Refactor | Cleanup, dead code removal, consolidating duplicated logic, improving naming/readability without changing behavior. |
+| Bug Fix | Identify and fix a specific, concrete, reproducible bug. Avoid prompts too vague to evaluate. |
+| New Feature | Add entirely new functionality to existing repo. Distinct from Greenfield (empty repo). |
+| Testing and QA | Write, improve, or extend tests for existing code. Distinct from Code Review - involves implementing changes, not recommending. |
 
 ### Descriptive (not Evaluative) Strengths
 - Strengths field must explain WHY something matters, not just describe

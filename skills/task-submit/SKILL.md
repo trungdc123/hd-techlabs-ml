@@ -72,26 +72,26 @@ Write `step1_spec.md` to the workspace with these 6 sections:
 **Turn 1 categories (MUST select from these for Turn 1):**
 
 | Category | Description |
-|----------|--------|
-| Git | Tasks involving git actions, complex enough for different approaches |
-| Ambiguous | Model should ask for clarification rather than code immediately |
-| Discussion | Answer questions without producing code, high variance needed |
-| Explaining | Explain how code works, narrate changes and reasoning |
-| Code Review | Review code at meaningful scope (feature suite level) |
-| Greenfield | Start from empty repo, build from scratch |
-| Chore | Maintenance: dependency updates, config, build system |
-| Documentation | Write/update docs, comments, docstrings, READMEs |
-| Performance | Improve latency, memory usage, or computational cost |
+|----------|-------------|
+| Git | Tasks involving git actions. Can span all turns or just one, but should be complex enough that both models take meaningfully different approaches. Avoid prompts that could cause race conditions (e.g., creating a branch by name). If possible, set up a private remote repository and interact with remote as part of prompting. |
+| Ambiguous | Tasks where the ideal model response is to ask for clarification rather than immediately produce code. Ask yourself: would a senior engineer stop and get clarification first? If yes, the prompt fits this category. Generally works best as the first turn. |
+| Discussion | One or more prompts use Claude Code to answer questions without producing code. Should be challenging questions where model response quality has significant variance. Ideally requires knowledge of the repo to answer well. Can be standalone or Turn 1 of a code-change conversation. |
+| Explaining | One or more prompts ask the model to explain how specific code works, walk through a codebase, or make changes and clearly narrate what was done and why. Preferences reflect both the correctness of the explanation and how clear, useful, and understandable it was. Distinct from Discussion - Discussion is about reasoning through problems or tradeoffs; Explaining is about asking how existing code or a change works. |
+| Code Review | One or more prompts ask for a code review. Use your judgement on scope - reviewing a feature suite is typically the right level. A review of trivial code with no issues is not a useful prompt. |
+| Greenfield | Task starts from an empty repository. Use your own creativity or draw inspiration from an existing PR to prompt Claude Code to build something from scratch. You do not need to select a PR if using your own creativity. |
+| Chore | Maintenance work that does not change external behavior - dependency updates, configuration changes, build system fixes, or similar housekeeping. Should still be complex enough that there is a meaningful difference in how the two models approach it. |
+| Documentation | One or more prompts ask the model to write, update, or improve documentation - inline comments, docstrings, README files, API docs, or similar. Should be challenging enough that model quality varies. |
+| Performance | One or more prompts ask the model to improve performance of existing code - reducing latency, memory usage, or computational cost. Should have a clear success condition. |
 | Other | Use only when task genuinely does not fit any above |
 
 **Turn 2+ only categories (NOT allowed for Turn 1):**
 
 | Category | Description |
-|----------|--------|
-| Refactor | Cleanup, consolidate logic, improve readability |
-| Bug Fix | Fix a specific, reproducible bug |
-| New Feature | Add entirely new functionality to existing repo |
-| Testing and QA | Write/improve/extend tests |
+|----------|-------------|
+| Refactor | One or more prompts relate to refactoring a portion of the codebase. Good fits: cleanup and dead code removal, performance-motivated restructuring, consolidating duplicated logic, improving naming and readability without changing behavior. |
+| Bug Fix | One or more prompts ask the model to identify and fix a specific bug or class of bugs. The bug should be concrete and reproducible - avoid prompts too vague to evaluate whether the fix is correct. |
+| New Feature | One or more prompts ask the model to add entirely new functionality to an existing repository. Distinct from Greenfield (empty repo) and Feature Extension (expanding existing functionality). |
+| Testing and QA | One or more prompts ask the model to write, improve, or extend tests for existing code. Distinct from Code Review - this involves actually implementing test changes, not recommending them. |
 
 Turn 1 MUST use one of the 10 Turn 1 categories. Turn 2+ MAY use any category, including the 4 Turn 2+ only ones. Turn 1 in one category, Turn 2+ in a different category = valid multi-category pattern, NOT drip-feeding.
 
