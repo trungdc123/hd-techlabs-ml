@@ -20,8 +20,8 @@ SxS scores must reflect the RELATIVE difference between 2 trajectories - not how
 ### Match justification language to rating level
 Written language must match the rating. "Clearly better" paired with A3 or hedged language paired with A1 creates contradiction. See table above.
 
-### Key-axis field REQUIRED for A1, A2, B1, B2
-When rating A1/A2/B1/B2, you MUST fill key-axis: name the main dimension that drove the preference - e.g.: correctness, test coverage, scope control, root cause handling, accuracy of self-reporting. Can be 1 or multiple dimensions. One sentence is sufficient.
+### Key-axis field REQUIRED for all ratings except A4/B4 (tie)
+For any non-tie rating, you MUST fill key-axis: list up to 3 axes that held the most weight in your overall preference selection. E.g.: correctness, test coverage, scope control, root cause handling, agent judgment, communication clarity. One sentence per axis is sufficient.
 
 ### Evaluative, not descriptive
 - BAD (descriptive): "Model A added tests"

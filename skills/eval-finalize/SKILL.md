@@ -33,7 +33,7 @@ Write `step3_finalization.md` to the workspace with 10 sections.
 
 1. Read `meta.json` for task metadata
 2. Read `step1_spec.md` for categories and acceptance criteria
-3. Read ALL turn evaluations: `turn_1/turn_1_evaluation.md` through `turn_N/turn_N_evaluation.md`
+3. Read ALL turn evaluations: `turn_1/turn_1_evaluation.md` through `turn_N/turn_N_evaluation.md` (each has 22 sections: 3 evaluation dimensions per model + 11 axes + rating/justification)
 4. Read ALL turn prompts
 5. Read `accepted_baseline.json` for the trajectory of accepted sides
 
@@ -94,7 +94,7 @@ Turn 1: {side} ({strength} preference). Turn 2: {side} ({strength} preference). 
 - 6.10 Senior SWE approach: {label}
 - 6.11 Clear communication: {label}
 
-**Key-axis** (REQUIRED if overall A1/A2/B1/B2): {main dimension driving preference}
+**Key-axis** (REQUIRED for all ratings except A4/B4 tie): List up to 3 axes that held the most weight in overall preference.
 
 ## 5. Average Model Runtime
 
@@ -104,7 +104,7 @@ Turn 1: {side} ({strength} preference). Turn 2: {side} ({strength} preference). 
 
 ## 6. Overall Justification
 
-{4-6 sentences. Explain the trajectory across all turns. Reference specific code contributions from each model. Explain why the winner won and what the loser contributed. Use specific file:function references.}
+{4-6 sentences. Explain the trajectory across all turns across 3 dimensions: solution quality, agent operation, and communication. Reference specific code contributions and agent behavior evidence from each model. Explain why the winner won and what the loser contributed. Use specific file:function references and transcript evidence.}
 
 ## 7. Submission Readiness
 
@@ -157,6 +157,9 @@ No em dashes, no blocked words, no template language.
 
 **GATE 5 - Rating Label Format:**
 All ratings in Section 4 must use label format (A1/A2/A3/A4/B4/B3/B2/B1), not numeric.
+
+**GATE 6 - Key-axis Required:**
+Key-axis field must be present for all non-tie ratings (everything except A4/B4). Must list up to 3 axes.
 
 ### Phase 7: Auto Quality Gate (REQUIRED before output)
 

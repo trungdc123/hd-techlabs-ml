@@ -64,7 +64,8 @@ Skills read all prior turn artifacts for context accumulation.
 ## V3 Key Changes
 
 - 11 evaluation axes (6.1-6.11), NO 6.12 - using N/A for any axis is instant rejection
-- Rating scale A1-B1 (no 0-7 numeric), key-axis field required for A1/A2/B1/B2
+- Rating scale A1-B1 (no 0-7 numeric), key-axis field required for all non-tie ratings (list up to 3 axes)
+- Each model evaluated across 3 dimensions: Solution Quality, Agent Operation, Communication (22 sections total per turn evaluation)
 - 14 prompt categories required
 - Phased implementation: Turn 1 does not need full scope
 - Evaluative strengths (explain WHY with file:function refs, not just descriptive)
