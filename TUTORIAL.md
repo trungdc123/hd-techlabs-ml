@@ -28,16 +28,22 @@ Hướng dẫn đầy đủ cho CTV và developers.
 
 ### 1.2 Cài đặt cho Claude Code
 
-```bash
-# Clone project
-cd /path/to/your/workspace
+Skills đã được tích hợp sẵn trong `.claude/skills/`. Không cần copy hay symlink.
 
-# Copy skills vào Claude Code
-cp -r skills/ .claude/skills/
-
-# Hoặc tạo symlink
-ln -s $(pwd)/skills .claude/skills/
-```
+> **Không dùng Claude Code?** Đọc trực tiếp file skill:
+> ```
+> .claude/skills/task-select
+> .claude/skills/task-submit
+> .claude/skills/checkpoint-review
+> .claude/skills/checkpoint-prompt
+> .claude/skills/checkpoint-qa
+> .claude/skills/eval-finalize
+> .claude/skills/validate-output
+> .claude/skills/rewrite-human
+> .claude/skills/get-logs
+> .claude/skills/gen-claude-md
+> ```
+> Mỗi file là self-contained prompt. Inject vào LLM của bạn làm system prompt.
 
 Kiểm tra skills đã load:
 ```
@@ -48,41 +54,35 @@ Kiểm tra skills đã load:
 
 ### 1.3 Cài đặt cho Cursor
 
-```bash
-# Copy skills vào thư mục .cursor/rules/ hoặc .cursorrules
-cp -r skills/ .cursor/skills/
-```
-
-Hoặc tạo file `.cursorrules` ở root project, include nội dung skill cần dùng:
+Tạo file `.cursorrules` ở root project, reference skills từ `.claude/skills/`:
 
 ```markdown
-# Trong .cursorrules, paste nội dung SKILL.md trực tiếp
-# Hoặc reference qua @file
+# Trong .cursorrules, reference qua @file
 
-@skills/checkpoint-review/SKILL.md
-@skills/validate-output/SKILL.md
+@.claude/skills/checkpoint-review
+@.claude/skills/validate-output
 ```
 
 Cách dùng trong Cursor chat:
 - Mở Composer (Cmd+I), gõ lệnh tương tự Claude Code
 - Có thể tag file context: `@workspace/329_.../turn_1/staged_diff_a.patch`
-- Cursor đọc được SKILL.md nếu bạn @ reference nó
+- Cursor đọc được skill file nếu bạn @ reference nó
 
 ### 1.4 Cài đặt cho Antigravity / Codex
 
-Đọc nội dung SKILL.md và dùng làm system prompt. Xem README.md phần "Tương thích đa nền tảng".
+Đọc nội dung skill và dùng làm system prompt. Xem README.md phần "Tương thích đa nền tảng".
 
 **Antigravity:**
 ```bash
-# Inject SKILL.md làm system prompt khi chạy task
-antigravity run --system-prompt skills/checkpoint-review/SKILL.md \
+# Inject skill làm system prompt khi chạy task
+antigravity run --system-prompt .claude/skills/checkpoint-review \
   --user "Review turn 1 in workspace/329_PrefectHQ_prefect_13620"
 ```
 
 **Codex (OpenAI):**
 ```bash
-# Tạo file instructions chứa nội dung SKILL.md
-cat skills/checkpoint-review/SKILL.md > .codex-instructions.md
+# Tạo file instructions chứa nội dung skill
+cat .claude/skills/checkpoint-review > .codex-instructions.md
 codex --instructions .codex-instructions.md
 ```
 
@@ -556,7 +556,7 @@ Vì context lưu trong workspace files, CTV có thể hỏi bất kỳ câu hỏ
 ### Skill không load trong Claude Code
 
 Kiểm tra:
-1. Files nằm đúng vị trí: `.claude/skills/task-select/SKILL.md`
+1. Files nằm đúng vị trí: `.claude/skills/task-select`
 2. Frontmatter đúng format (bắt đầu bằng `---`)
 3. Restart Claude Code session
 

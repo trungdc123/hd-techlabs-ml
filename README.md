@@ -24,30 +24,24 @@ Có 3 solutions cũ, mỗi cái thiếu một phần:
 
 | # | Skill | Chức năng | Chống Reject |
 |---|-------|-----------|-------------|
-| 1 | [task-select](skills/task-select/SKILL.md) | Đánh giá PR phù hợp không (TAKE/SKIP/CAUTION) | Low Quality Task (5.2%) |
-| 2 | [task-submit](skills/task-submit/SKILL.md) | Tạo Step 1 spec (6 fields) | Redundant Prompts (21.9%), Scope Creep (7.6%) |
-| 3 | [checkpoint-review](skills/checkpoint-review/SKILL.md) | Phân tích A/B, 21 sections, 12 trục đánh giá | Inaccurate Eval (14.2%), Rating Inconsistency (9.4%) |
-| 4 | [checkpoint-prompt](skills/checkpoint-prompt/SKILL.md) | Tạo prompt cho turn tiếp theo | Redundant Prompts (21.9%), Scope Creep (7.6%) |
-| 5 | [eval-finalize](skills/eval-finalize/SKILL.md) | Bước 3 finalization (10 sections) | Incomplete Work (9.7%) |
-| 6 | [rewrite-human](skills/rewrite-human/SKILL.md) | Viết lại text chống AI detection | AI/LLM Detected (10.1%) |
-| 7 | [validate-output](skills/validate-output/SKILL.md) | 38 bước kiểm tra (P0/P1/P2) | Tất cả categories |
-| 8 | [checkpoint-qa](skills/checkpoint-qa/SKILL.md) | Brainstorm câu hỏi, gợi ý đáp án, đánh giá đáp án CTV | Inaccurate Eval (14.2%), Fabricated (6.9%) |
-| 9 | [get-logs](skills/get-logs/SKILL.md) | Lấy logs từ tmux session, phân tích running state | Process Violation (4.2%) |
-| 10 | [gen-claude-md](skills/gen-claude-md/SKILL.md) | Tự tạo CLAUDE.md cho repo (V3 bắt buộc) | Process Violation (4.2%) |
+| 1 | [task-select](.claude/skills/task-select) | Đánh giá PR phù hợp không (TAKE/SKIP/CAUTION) | Low Quality Task (5.2%) |
+| 2 | [task-submit](.claude/skills/task-submit) | Tạo Step 1 spec (6 fields) | Redundant Prompts (21.9%), Scope Creep (7.6%) |
+| 3 | [checkpoint-review](.claude/skills/checkpoint-review) | Phân tích A/B, 21 sections, 12 trục đánh giá | Inaccurate Eval (14.2%), Rating Inconsistency (9.4%) |
+| 4 | [checkpoint-prompt](.claude/skills/checkpoint-prompt) | Tạo prompt cho turn tiếp theo | Redundant Prompts (21.9%), Scope Creep (7.6%) |
+| 5 | [eval-finalize](.claude/skills/eval-finalize) | Bước 3 finalization (10 sections) | Incomplete Work (9.7%) |
+| 6 | [rewrite-human](.claude/skills/rewrite-human) | Viết lại text chống AI detection | AI/LLM Detected (10.1%) |
+| 7 | [validate-output](.claude/skills/validate-output) | 38 bước kiểm tra (P0/P1/P2) | Tất cả categories |
+| 8 | [checkpoint-qa](.claude/skills/checkpoint-qa) | Brainstorm câu hỏi, gợi ý đáp án, đánh giá đáp án CTV | Inaccurate Eval (14.2%), Fabricated (6.9%) |
+| 9 | [get-logs](.claude/skills/get-logs) | Lấy logs từ tmux session, phân tích running state | Process Violation (4.2%) |
+| 10 | [gen-claude-md](.claude/skills/gen-claude-md) | Tự tạo CLAUDE.md cho repo (V3 bắt buộc) | Process Violation (4.2%) |
 
 ## Bắt đầu nhanh
 
 ### Với Claude Code
 
-```bash
-# Copy skills vào project
-cp -r skills/ .claude/skills/
+Skills đã được cài đặt sẵn trong `.claude/skills/`. Chỉ cần gọi trực tiếp trong Claude Code session:
 
-# Ho��c tạo symlink
-ln -s $(pwd)/skills .claude/skills
-```
-
-Sau đó trong Claude Code session:
+> **Không dùng Claude Code?** Đọc trực tiếp file skill tại `.claude/skills/<tên-skill>` (ví dụ: `.claude/skills/checkpoint-review`). Mỗi file là self-contained prompt, inject vào LLM của bạn làm system prompt.
 ```
 /task-select https://github.com/owner/repo/pull/123
 /task-submit workspace/329_owner_repo_123
@@ -77,7 +71,7 @@ bash scripts/collect_diffs.sh workspace/329_PrefectHQ_prefect_13620 1 /path/work
 Mỗi SKILL.md là self-contained. Đọc nội dung và inject làm system prompt:
 
 ```python
-with open("skills/checkpoint-review/SKILL.md") as f:
+with open(".claude/skills/checkpoint-review") as f:
     skill_content = f.read()
 
 # Inject vào LLM call
@@ -90,25 +84,27 @@ response = llm.chat(
 ## Cấu trúc dự án
 
 ```
-tbrain-marlin-crack/
+hd-techlabs-ml/
   CLAUDE.md                    # Quy tắc project cho Claude Code
   README.md                    # Bạn đang đọc file này
   TUTORIAL.md                  # Hướng dẫn sử dụng chi tiết
-  skills/
-    _shared/                   # Tài nguyên dùng chung
-      blocked_words.md         # 43 từ EN + 14 từ VI bị cấm
-      rating_scale.md          # Thang đánh giá 12 trục
-      rejection_rules.md       # Top 10 lý do reject + P0-P5
-      style_guide.md           # Quy tắc viết chống AI detection
-    task-select/SKILL.md       # Đánh giá PR
-    task-submit/SKILL.md       # Tạo Step 1 spec
-    checkpoint-review/SKILL.md # Phân tích A/B
-    checkpoint-qa/SKILL.md     # Brainstorm Q&A sau checkpoint
-    checkpoint-prompt/SKILL.md # Tạo prompt turn tiếp
-    eval-finalize/SKILL.md     # Finalization
-    rewrite-human/SKILL.md     # Viết lại text
-    validate-output/SKILL.md   # Kiểm tra chất lượng
-    get-logs/SKILL.md          # Lấy logs từ tmux
+  .claude/
+    skills/                    # Agent skills (đã tích hợp sẵn)
+      eval/                    # Shared resources
+        reference/             # Tài liệu tham khảo (axis, rating, rules)
+        templates/             # Output templates
+        hooks/                 # Hook scripts
+      task-select              # Đánh giá PR
+      task-submit              # Tạo Step 1 spec
+      checkpoint-review        # Phân tích A/B
+      checkpoint-qa            # Brainstorm Q&A sau checkpoint
+      checkpoint-prompt        # Tạo prompt turn tiếp
+      eval-finalize            # Finalization
+      rewrite-human            # Viết lại text
+      validate-output          # Kiểm tra chất lượng
+      get-logs                 # Lấy logs từ tmux
+      gen-claude-md            # Tự tạo CLAUDE.md
+      claudemd-creator         # Tạo/enhance CLAUDE.md
   scripts/
     init_task.sh               # Tạo workspace + meta.json
     fetch_pr_diff.sh           # Fetch PR diff từ GitHub API
@@ -189,14 +185,18 @@ Skills được thiết kế để chống reject (phân tích từ 288 bản gh
 
 ## Tương thích đa nền tảng
 
+> **Tất cả skills nằm tại:** `.claude/skills/<tên-skill>`
+> 
+> Ví dụ: `.claude/skills/checkpoint-review`, `.claude/skills/validate-output`
+
 | Nền tảng | Cách dùng |
 |----------|----------|
-| Claude Code | Skills trong `.claude/skills/`, gọi `/skill-name` |
-| Cursor | Copy vào `.cursor/skills/` hoặc `@reference` trong Composer |
-| Antigravity | SKILL.md làm `--system-prompt` |
-| Codex (OpenAI) | SKILL.md làm `--instructions` |
-| Custom Python | Đọc SKILL.md, inject vào LLM prompt |
-| LangChain/LangGraph | Nội dung SKILL.md trong agent prompt |
+| Claude Code | Gọi `/skill-name` trực tiếp |
+| Cursor | `@.claude/skills/checkpoint-review` trong Composer |
+| Antigravity | `--system-prompt .claude/skills/checkpoint-review` |
+| Codex (OpenAI) | `--instructions .claude/skills/checkpoint-review` |
+| Custom Python | `open(".claude/skills/checkpoint-review").read()` → inject vào LLM |
+| LangChain/LangGraph | Đọc file skill, dùng làm system message |
 
 ## Dữ liệu tham khảo
 
