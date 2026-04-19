@@ -163,7 +163,7 @@ Compare A vs B using the independent evaluations. Assign an overall numeric scor
 
 **Per-axis scoring (MANDATORY):** Each axis question (6.1-6.11) MUST have its own score (0-7) using the same scale as the overall rating. Write the score inline at the start of each axis answer, e.g. `**6.1 — Did the model get to the right answer? [5]**`. At least 2-3 axis scores must differ from the overall score — no identical ratings across all axes. The overall score should align with the majority of axis scores.
 
-**6.12 - Key axes driving preference:** List up to 3 axis numbers that held the most weight in the overall preference. Required when score is 0, 1, 2, 5, 6, or 7 (non-equivalent).
+**6.12 - Key axes driving preference:** List up to 3 axis short-names (text only, not numbers) that held the most weight in the overall preference, e.g. "judgment", "communication", "accuracy", "senior approach". Do NOT use numeric references like "6.7, 6.10, 6.11". Required when score is 0, 1, 2, 5, 6, or 7 (non-equivalent).
 
 **6.13 - Overall preference:** State which model wins and why. Must align with the Rating score. Do not let streaming speed affect the choice.
 
@@ -331,7 +331,7 @@ This keeps the console clean and makes outputs easily accessible for review.
 
 ## Post-Processing: Anti-LLM Rewrite
 
-After generating the full evaluation output, run a rewrite pass using the `rewrite-human` skill rules (defined in `rewrite-human.md` at project root). This pass rewrites the eval text to eliminate LLM-detectable patterns while preserving 100% of technical facts, file names, function names, ratings, and data.
+After generating the full evaluation output, run a rewrite pass using the `rewrite-human` skill rules (defined in `reference/human-rewrite.md` inside this skill directory). This pass rewrites the eval text to eliminate LLM-detectable patterns while preserving 100% of technical facts, file names, function names, ratings, and data.
 
 **Rewrite scope:** All prose sections - senior expectations, solution quality, agent behavior, communication (both models), axis answers (6.1-6.13), justification, next turn prompt. Do NOT rewrite the ratings table, choice line, or key-axis line.
 
@@ -348,6 +348,7 @@ After generating the full evaluation output, run a rewrite pass using the `rewri
 10. No balanced sandwich - state winner first, mention loser briefly
 11. Kill summary-fragment codas at the end of paragraphs ("Total: 6 new tests. Clean diff.", "173 lines, 18 methods.", "Result: passing.") - a real person just stops when the point is made, they don't append a stat-line recap. If a number matters, weave it into a sentence earlier
 12. Kill inventory/counting sentences that just list stats without analysis ("21 tests across 5 classes covering 3 factories") - either explain why the count matters or drop it
+13. Kill Unicode arrows and special glyphs - humans type ASCII on keyboards, not Unicode. Replace `→` `←` `⇒` with `->`, `<-`, `=>`. Replace `…` with `...`, curly quotes `" " ' '` with straight `" '`, em dash `—` with hyphen `-` or comma, en dash `–` with hyphen `-`. This applies especially to naming maps (`Foo -> Bar` not `Foo → Bar`), file renames (`a.py -> b.py`), and before/after pairs. Arrow glyphs are one of the strongest LLM tells in code-review prose
 
 **How it works:** After the eval output is fully generated, spawn a `general-purpose` sub-agent with the complete eval text and the 10 rewrite rules. The sub-agent rewrites all prose sections and returns the final text. Output the rewritten version as the final eval result.
 
@@ -395,6 +396,7 @@ After generating the eval output (post-rewrite), spawn a `code-reviewer` sub-age
 - No formulaic openers ("I noticed", "It seems", "Let me")
 - No cheerleading ("Great progress!", "Well done")
 - Varied sentence structure (not parallel across sections)
+- No Unicode typographic tells: em dash (—), en dash (–), Unicode arrows (→ ← ⇒), ellipsis (…), curly quotes (" " ' '). Use ASCII equivalents (- -> ... " ') - humans type on keyboards. Naming maps and file renames especially must use `->` not `→`
 
 **Sub-agent response format:**
 
@@ -458,7 +460,7 @@ Write in continuous prose. Vary sentence length. Short sentence when making a po
 - Cheerleading: "Great progress!", "Fixed all issues from Turn N", "Well done"
 - Priority labels: HIGH/MEDIUM/LOW
 - Trailing fillers: "etc", "etc.", "and so on", "and more"
-- Typographic tells: em dash (—), double dash (--), use hyphen (-) instead; excessive bold/italic
+- Typographic tells: em dash (—), double dash (--), use hyphen (-) instead; Unicode arrows (→ ← ⇒) use ASCII (-> <- =>) instead; ellipsis (…) use three dots (...); curly quotes (" " ' ') use straight (" '); excessive bold/italic
 - Parallel structure across every point (varying structure is what makes writing feel human)
 - Starting consecutive sentences with the same word
 - Table-heavy formatting for analysis text (tables OK for ratings, not for reasoning)

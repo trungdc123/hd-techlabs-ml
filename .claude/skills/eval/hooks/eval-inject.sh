@@ -38,7 +38,17 @@ if [[ "$REPO" =~ [^a-zA-Z0-9._-] ]]; then
   exit 0
 fi
 
-CACHE_DIR="$HOME/.cache/claude-hfi/$REPO"
+# Resolve cache dir: claude-hfi uses CWD-flattened prefix for worktree isolation.
+# Prefer CWD-prefixed path; fallback to bare repo name for backward compat.
+CWD_SLUG=$(pwd | sed 's|/|-|g')
+CACHE_DIR_CWD="$HOME/.cache/claude-hfi/${CWD_SLUG}-${REPO}"
+CACHE_DIR_BARE="$HOME/.cache/claude-hfi/$REPO"
+
+if [ -d "$CACHE_DIR_CWD/A" ] || [ -d "$CACHE_DIR_CWD/B" ]; then
+  CACHE_DIR="$CACHE_DIR_CWD"
+else
+  CACHE_DIR="$CACHE_DIR_BARE"
+fi
 STATE_FILE="$CACHE_DIR/eval-state.json"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SKILL_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"

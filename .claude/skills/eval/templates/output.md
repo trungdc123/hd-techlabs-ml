@@ -56,8 +56,8 @@
 **6.11 - Was communication clear, pleasant, and to the point? [{score}]**
 {1-2 sentences. Got to the point?}
 
-**6.12 - Key axes driving preference? [{up to 3 axis numbers}]**
-{If score is not 3 or 4, list up to 3 axis numbers with brief why. Otherwise "Equivalent - no dominant axis."}
+**6.12 - Key axes driving preference? [{up to 3 axis short-names as text, not numbers}]**
+{If score is not 3 or 4, list up to 3 axis short-names (text like "judgment", "communication", "accuracy") with brief why. Do NOT use numeric references like "6.7, 6.10". Otherwise "Equivalent - no dominant axis."}
 
 **6.13 - Overall preference [{score}]**
 {2-3 sentences. Which model wins and why. Aligns with Rating score.}
