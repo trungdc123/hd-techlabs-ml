@@ -103,8 +103,7 @@ hd-techlabs-ml/
       rewrite-human            # Viết lại text
       validate-output          # Kiểm tra chất lượng
       get-logs                 # Lấy logs từ tmux
-      gen-claude-md            # Tự tạo CLAUDE.md
-      claudemd-creator         # Tạo/enhance CLAUDE.md
+      gen-claude-md/           # Tự tạo CLAUDE.md (cho agents không có /init)
   scripts/
     init_task.sh               # Tạo workspace + meta.json
     fetch_pr_diff.sh           # Fetch PR diff từ GitHub API

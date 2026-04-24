@@ -1,191 +1,270 @@
 ---
 name: gen-claude-md
-description: Auto-generate CLAUDE.md for a repo if none exists. V3 requires CLAUDE.md before running claude-hfi. Analyzes repo structure, conventions, test commands.
+description: Generate CLAUDE.md files for any codebase. Use when initializing a new repo for AI agents, when /init is unavailable (Cursor, Codex, custom agents), or when enhancing an existing CLAUDE.md.
 user-invocable: true
 disable-model-invocation: false
-argument-hint: <repo_path>
-requires:
-  - Repo already cloned/unpacked
+argument-hint: "[path] [--minimal|--enhance]"
 produces:
-  - CLAUDE.md at repo root
-calls: []
+  - CLAUDE.md
 ---
 
-# Gen CLAUDE.md - Auto-generate CLAUDE.md for Repo
+# Gen Claude MD - CLAUDE.md Generator
 
-V3 REQUIRES all repos to have CLAUDE.md before running claude-hfi. This skill auto-generates it if the repo doesn't have one.
-
-## When to Use
-
-- Repo does NOT have CLAUDE.md -> run this skill
-- Repo ALREADY has CLAUDE.md -> not needed, use as-is (may add targeted additions)
+Generate CLAUDE.md files following Claude Code best practices. For AI agents without `/init` command.
 
 ## Input
 
-Repo path via $ARGUMENTS or current directory.
+- `$ARGUMENTS` - optional path and flags
+- Default: current working directory
+- Flags: `--minimal` (bare minimum), `--enhance` (improve existing)
 
 ## Output
 
-Creates `CLAUDE.md` at repo root.
+Write `CLAUDE.md` to target directory root.
 
-## Steps
+## Workflow
 
-### Step 1: Analyze repo structure
+### Step 1: Detect Target
 
-Read and analyze:
-1. **README.md** - project description, install guide
-2. **Package files** - determine language and dependencies:
-   - Python: `requirements.txt`, `setup.py`, `pyproject.toml`, `Pipfile`
-   - JS/TS: `package.json`, `tsconfig.json`
-   - Go: `go.mod`, `go.sum`
-   - Rust: `Cargo.toml`
-   - Java: `pom.xml`, `build.gradle`
-   - C++: `CMakeLists.txt`, `Makefile`
-3. **Config files** - `.editorconfig`, `.prettierrc`, `ruff.toml`, `eslint.config.*`
-4. **CI/CD** - `.github/workflows/`, `.gitlab-ci.yml`, `Makefile`
-5. **Test directories** - `tests/`, `test/`, `__tests__/`, `spec/`
-6. **Source structure** - `src/`, `lib/`, `cmd/`, `pkg/`, `app/`
+```
+path = $ARGUMENTS or CWD
+mode = "generate" (default) | "minimal" | "enhance"
+```
 
-### Step 2: Determine conventions
+If `--enhance` and existing CLAUDE.md found, read it first.
 
-From code analysis, determine:
-- **Primary language** and version
-- **Build system** (npm, pip, cargo, make, gradle...)
-- **Test framework** (pytest, jest, go test, cargo test...)
-- **Linting** (ruff, eslint, clippy, golangci-lint...)
-- **Code style** (formatter, clear conventions)
-- **Architecture patterns** (module structure, naming conventions)
+### Step 2: Scan Codebase
 
-### Step 3: Determine test commands
+Run these detection passes:
 
-Find how to run tests:
-- From `Makefile`: targets `test`, `check`, `lint`
-- From `package.json`: scripts `test`, `lint`, `build`
-- From CI config: commands in test jobs
-- Fallback: language convention (`pytest`, `npm test`, `go test ./...`)
+**Language Detection**
+```bash
+# Check file extensions
+find . -maxdepth 3 -type f \( -name "*.py" -o -name "*.ts" -o -name "*.js" -o -name "*.go" -o -name "*.rs" -o -name "*.java" \) | head -20
+```
 
-### Step 4: Generate CLAUDE.md
+**Config File Detection**
+```bash
+# Package managers & build tools
+ls -la package.json pyproject.toml setup.py Cargo.toml go.mod pom.xml build.gradle Makefile 2>/dev/null
+```
+
+**Framework Detection**
+- `next.config.*` → Next.js
+- `nuxt.config.*` → Nuxt
+- `vite.config.*` → Vite
+- `django/settings.py` or `manage.py` → Django
+- `app.py` + Flask imports → Flask
+- `main.py` + FastAPI imports → FastAPI
+- `Cargo.toml` → Rust
+- `go.mod` → Go
+
+**Test Framework Detection**
+```bash
+# Look for test configs
+ls -la pytest.ini setup.cfg jest.config.* vitest.config.* .mocharc.* 2>/dev/null
+# Check package.json scripts
+cat package.json 2>/dev/null | grep -E '"test"|"jest"|"vitest"|"mocha"'
+```
+
+**Lint/Format Detection**
+```bash
+ls -la .eslintrc* .prettierrc* .flake8 pyproject.toml .golangci.yml rustfmt.toml 2>/dev/null
+```
+
+### Step 3: Extract Commands
+
+From `package.json`:
+```bash
+cat package.json | jq -r '.scripts | to_entries[] | "- `npm run \(.key)` - \(.value)"' 2>/dev/null
+```
+
+From `Makefile`:
+```bash
+grep -E "^[a-zA-Z_-]+:" Makefile 2>/dev/null | head -10
+```
+
+From `pyproject.toml`:
+```bash
+grep -A5 "\[tool.poetry.scripts\]" pyproject.toml 2>/dev/null
+```
+
+### Step 4: Detect Conventions
+
+Read existing style configs:
+- `.editorconfig` → indentation, line endings
+- `tsconfig.json` → TypeScript strictness
+- `pyproject.toml [tool.black]` → Python formatting
+- `.eslintrc` → JS/TS rules
+
+Check for patterns:
+- kebab-case vs camelCase in filenames
+- Test file patterns (`*.test.ts`, `*_test.go`, `test_*.py`)
+- Import style (relative vs absolute)
+
+### Step 5: Generate CLAUDE.md
+
+Use this template. Omit empty sections.
 
 ```markdown
-# CLAUDE.md
+# {Project Name}
 
-## Project Overview
-{1-2 sentences describing project, from README}
+{One sentence describing what this project does.}
 
-## Language & Stack
-- Primary: {language} {version}
-- Dependencies: {package manager} ({file})
-- Framework: {if applicable}
+## Stack
 
-## Build & Run
-```
-{exact commands to build and run}
-```
+- {Language}: {version if detectable}
+- {Framework}: {version if detectable}
+- {Build tool}: {version}
 
-## Testing
-```
-{exact commands to run tests}
-```
-{Test framework, test directory, convention}
+## Commands
 
-## Linting & Formatting
-```
-{exact commands}
-```
+- `{command}` — {what it does}
+- `{command}` — {what it does}
 
-## Project Structure
-```
-{key directories and their purpose}
+## Conventions
+
+- {Non-obvious convention 1}
+- {Non-obvious convention 2}
+
+## Architecture
+
+{Brief directory overview - only include if structure is non-standard}
+
+## Rules
+
+- {Hard constraint that Claude can't infer from code}
 ```
 
-## Code Conventions
-- {naming convention}
-- {import order}
-- {error handling pattern}
-- {other detected conventions}
+### Step 6: Quality Gates
 
-## Important Notes
-- {architectural constraints}
-- {known issues}
-- {areas to be careful with}
-```
+**GATE 1: Length Check**
+- Target: 50-100 lines
+- Max: 300 lines
+- If over 100 lines: prune ruthlessly
 
-### Step 5: Verify
+**GATE 2: Content Validation**
+Ask for each line: "Would Claude make mistakes without this?"
+- YES → keep
+- NO → remove
 
-Check CLAUDE.md:
-- Enough info for model to understand the repo?
-- Test commands actually work?
-- Conventions accurate?
+**GATE 3: Exclude List**
+Remove if present:
+- Standard language conventions Claude knows
+- Info Claude can figure out by reading code
+- Detailed API documentation (link instead)
+- Frequently changing information
+- File-by-file codebase descriptions
+- Self-evident practices ("write clean code")
 
-## V3 CLAUDE.md Workflow (IMPORTANT)
+### Step 7: Write Output
 
-Operation order when using with claude-hfi:
+Write CLAUDE.md to target directory root.
 
-1. **Ensure clean main branch** (no pending changes)
-2. **Launch HFI tool** (`./claude-hfi --vscode`) - MUST launch FIRST
-3. **Create CLAUDE.md** using this skill (in separate terminal, NOT in claude-hfi)
-4. **Copy CLAUDE.md to HFI cache** - HFI uses its own internal cache:
-   - Path A: original repo (where you created CLAUDE.md)
-   - Path B: HFI cache (where HFI actually reads from)
-   - Copy: `cp CLAUDE.md <hfi-cache-path>/CLAUDE.md`
-5. **After copying**, Claude Code in HFI will see and follow CLAUDE.md
+If `--enhance` mode:
+- Preserve user's custom sections
+- Add missing detected sections
+- Don't duplicate existing content
 
-NOTES:
-- HFI will NOT push CLAUDE.md to git remote
-- If you ask Claude Code to update CLAUDE.md, it will target the correct file
-- Only needs to be done once per repo
+## Mode Variants
 
-## Example Output for Python Repo
+### --minimal
 
+Only generate:
 ```markdown
-# CLAUDE.md
+# {Project Name}
 
-## Project Overview
-Prefect is an open-source workflow orchestration framework for Python.
+{One sentence.}
 
-## Language & Stack
-- Primary: Python 3.11+
-- Dependencies: pip (requirements.txt, setup.cfg)
-- Framework: FastAPI (internal API), Click (CLI)
+## Commands
 
-## Build & Run
-```
-pip install -e ".[dev]"
-prefect server start
+- `{build command}`
+- `{test command}`
+- `{lint command}`
 ```
 
-## Testing
-```
-pytest tests/ -v --tb=short
-pytest tests/test_callables.py -v  # specific file
-```
-Test framework: pytest. Tests in tests/ directory.
+### --enhance
 
-## Linting & Formatting
-```
-ruff check src/
-ruff format src/
+1. Read existing CLAUDE.md
+2. Parse sections
+3. Detect missing info from codebase
+4. Merge without duplicating
+5. Output enhanced version
+
+## Examples
+
+**Python/FastAPI project:**
+```markdown
+# My API
+
+REST API for user management built with FastAPI.
+
+## Stack
+
+- Python: 3.11
+- FastAPI: 0.100+
+- PostgreSQL: 15
+
+## Commands
+
+- `make dev` — Start development server with hot reload
+- `make test` — Run pytest with coverage
+- `make lint` — Run ruff + mypy
+
+## Conventions
+
+- Use Pydantic models for all request/response schemas
+- Async functions for all database operations
+- Tests in `tests/` mirror `src/` structure
+
+## Rules
+
+- All endpoints require authentication except `/health`
+- Database migrations must be backwards compatible
 ```
 
-## Project Structure
-```
-src/prefect/
-  cli/          # CLI commands (Click)
-  client/       # API client
-  flows.py      # Flow definitions
-  utilities/    # Helper modules
-    callables.py  # Function introspection
-tests/          # pytest tests
+**Next.js project:**
+```markdown
+# My App
+
+E-commerce storefront with Next.js App Router.
+
+## Stack
+
+- TypeScript: 5.x
+- Next.js: 14 (App Router)
+- Tailwind CSS
+
+## Commands
+
+- `npm run dev` — Development server on :3000
+- `npm run build` — Production build
+- `npm test` — Jest unit tests
+- `npm run e2e` — Playwright end-to-end tests
+
+## Conventions
+
+- Server Components by default, 'use client' only when needed
+- Colocation: components live next to pages that use them
+- Use `@/` alias for src imports
+
+## Rules
+
+- No inline styles - use Tailwind classes
+- All data fetching in Server Components
 ```
 
-## Code Conventions
-- Type hints on all public functions
-- Docstrings in Google style
-- Async/await preferred for I/O
-- Tests in same directory structure as source
+## Anti-Patterns
 
-## Important Notes
-- pydantic v1 and v2 both supported (check HAS_PYDANTIC_V2)
-- AST walkers must handle both FunctionDef and AsyncFunctionDef
-- Module resolution uses importlib.util.find_spec
-```
+**DON'T include:**
+- "Use meaningful variable names" (obvious)
+- "Follow PEP 8" (Claude knows Python conventions)
+- Entire API documentation
+- Version numbers that change frequently
+- "This project uses React" (Claude can see that)
+
+**DO include:**
+- Non-standard build commands
+- Project-specific architectural decisions
+- Constraints Claude can't infer from code
+- Test commands with specific flags
